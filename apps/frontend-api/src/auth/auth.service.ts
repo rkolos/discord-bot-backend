@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -85,5 +85,62 @@ export class AuthService {
       }),
     );
     return { accessToken, refreshToken, expiresAt };
+  }
+
+  async refresh(refreshTokenValue: string): Promise<{
+    accessToken: string;
+    refreshToken: string;
+    expiresAt: Date;
+  }> {
+    const tokenHash = createHash('sha256')
+      .update(refreshTokenValue)
+      .digest('hex');
+    const record = await this.refreshTokenRepository.findOne({
+      where: { tokenHash },
+    });
+    if (!record) {
+      throw new UnauthorizedException('Invalid or expired refresh token');
+    }
+    if (record.revokedAt) {
+      await this.revokeAllRefreshTokensForUser(record.userId);
+      throw new UnauthorizedException('Refresh token reuse detected');
+    }
+    const now = new Date();
+    if (record.expiresAt <= now) {
+      throw new UnauthorizedException('Invalid or expired refresh token');
+    }
+    const user = await this.userRepository.findOne({
+      where: { id: record.userId },
+    });
+    if (!user || user.status !== UserStatus.ACTIVE) {
+      throw new UnauthorizedException('Invalid or expired refresh token');
+    }
+    record.revokedAt = now;
+    await this.refreshTokenRepository.save(record);
+    return this.createSession(user);
+  }
+
+  async logout(userId: string, refreshTokenValue: string | undefined): Promise<void> {
+    if (!refreshTokenValue) {
+      return;
+    }
+    const tokenHash = createHash('sha256')
+      .update(refreshTokenValue)
+      .digest('hex');
+    const record = await this.refreshTokenRepository.findOne({
+      where: { tokenHash, userId: userId },
+    });
+    if (record && !record.revokedAt) {
+      record.revokedAt = new Date();
+      await this.refreshTokenRepository.save(record);
+    }
+  }
+
+  private async revokeAllRefreshTokensForUser(userId: string): Promise<void> {
+    const now = new Date();
+    await this.refreshTokenRepository.update(
+      { userId },
+      { revokedAt: now },
+    );
   }
 }

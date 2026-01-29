@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
+import { PassportModule } from '@nestjs/passport';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { HttpModule } from '@nestjs/axios';
 import {
@@ -11,10 +12,12 @@ import {
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { DiscordOAuthService } from './discord-oauth.service';
+import { JwtStrategy } from './jwt.strategy';
 
 @Module({
   imports: [
     SharedConfigModule,
+    PassportModule,
     TypeOrmModule.forFeature([User, RefreshToken]),
     JwtModule.registerAsync({
       imports: [SharedConfigModule],
@@ -29,7 +32,7 @@ import { DiscordOAuthService } from './discord-oauth.service';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, DiscordOAuthService],
+  providers: [AuthService, DiscordOAuthService, JwtStrategy],
   exports: [AuthService],
 })
 export class AuthModule {}

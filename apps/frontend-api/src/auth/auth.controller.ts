@@ -8,14 +8,21 @@ import {
   HttpStatus,
   ForbiddenException,
   Res,
+  Req,
+  UnauthorizedException,
+  UseGuards,
 } from '@nestjs/common';
-import { Response } from 'express';
+import { Request, Response } from 'express';
 import { AuthService } from './auth.service';
 import { DiscordOAuthService } from './discord-oauth.service';
 import { DiscordCallbackDto } from './dto';
 import { SharedConfigService } from '@app/shared';
+import { JwtAuthGuard } from './jwt-auth.guard';
+import { CurrentUser } from './decorators/current-user.decorator';
+import { User } from '@app/shared';
 
 const REFRESH_TOKEN_COOKIE_NAME = 'refresh_token';
+const COOKIE_PATH = '/api/auth/refresh';
 const COOKIE_MAX_AGE_DAYS = 7;
 const COOKIE_MAX_AGE_SECONDS = COOKIE_MAX_AGE_DAYS * 24 * 60 * 60;
 
@@ -66,6 +73,7 @@ export class AuthController {
       httpOnly: true,
       secure: isProduction,
       sameSite: 'strict',
+      path: COOKIE_PATH,
       maxAge: COOKIE_MAX_AGE_SECONDS * 1000,
       expires: expiresAt,
     });
@@ -80,5 +88,49 @@ export class AuthController {
         },
       },
     };
+  }
+
+  @Post('refresh')
+  @HttpCode(HttpStatus.OK)
+  async refresh(
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<{ data: { accessToken: string } }> {
+    const refreshTokenValue = req.cookies?.[REFRESH_TOKEN_COOKIE_NAME];
+    if (!refreshTokenValue) {
+      throw new UnauthorizedException('Missing refresh token');
+    }
+    const { accessToken, refreshToken, expiresAt } =
+      await this.authService.refresh(refreshTokenValue);
+    const isProduction = this.sharedConfig.isDevelopment === false;
+    res.cookie(REFRESH_TOKEN_COOKIE_NAME, refreshToken, {
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: 'strict',
+      path: COOKIE_PATH,
+      maxAge: COOKIE_MAX_AGE_SECONDS * 1000,
+      expires: expiresAt,
+    });
+    return { data: { accessToken } };
+  }
+
+  @Post('logout')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(JwtAuthGuard)
+  async logout(
+    @CurrentUser() user: User,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<{ data: { success: true } }> {
+    const refreshTokenValue = req.cookies?.[REFRESH_TOKEN_COOKIE_NAME];
+    await this.authService.logout(user.id, refreshTokenValue);
+    const isProduction = this.sharedConfig.isDevelopment === false;
+    res.clearCookie(REFRESH_TOKEN_COOKIE_NAME, {
+      path: COOKIE_PATH,
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: 'strict',
+    });
+    return { data: { success: true } };
   }
 }
