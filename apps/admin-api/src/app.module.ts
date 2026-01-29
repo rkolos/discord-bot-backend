@@ -1,7 +1,7 @@
-import { SharedConfigModule } from '@app/shared';
+import { DatabaseModule, SharedConfigModule } from '@app/shared';
 import { Module } from '@nestjs/common';
 
 @Module({
-  imports: [SharedConfigModule],
+  imports: [SharedConfigModule, DatabaseModule],
 })
 export class AppModule {}

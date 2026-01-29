@@ -58,6 +58,7 @@ services:
     env_file: .env
     environment:
       NODE_ENV: development
+      POSTGRES_HOST: postgres
       DB_HOST: postgres
       REDIS_HOST: redis
       CLICKHOUSE_HOST: clickhouse
@@ -83,6 +84,7 @@ services:
     environment:
       NODE_ENV: development
       PORT: 3001
+      POSTGRES_HOST: postgres
       DB_HOST: postgres
       REDIS_HOST: redis
       CLICKHOUSE_HOST: clickhouse
@@ -116,7 +118,7 @@ services:
     networks:
       - sn-network
 
-  ingestor:
+  ingestor-worker:
     build:
       context: .
       dockerfile: Dockerfile
@@ -129,7 +131,7 @@ services:
     volumes:
       - .:/app
       - /app/node_modules
-    command: npm run start:dev -- ingestor
+    command: npm run start:dev -- ingestor-worker
     depends_on:
       redis: { condition: service_healthy }
       clickhouse: { condition: service_started }
@@ -144,6 +146,7 @@ services:
     env_file: .env
     environment:
       NODE_ENV: development
+      POSTGRES_HOST: postgres
       DB_HOST: postgres
       REDIS_HOST: redis
     volumes:
