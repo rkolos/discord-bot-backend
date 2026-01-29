@@ -5,6 +5,7 @@ import {
   SharedConfigModule,
 } from '@app/shared';
 import { Module } from '@nestjs/common';
+import { TestValidationController } from './test-validation.controller';
 
 @Module({
   imports: [
@@ -13,5 +14,6 @@ import { Module } from '@nestjs/common';
     RedisModule.forRootAsync(),
     ClickHouseModule.forRootAsync(),
   ],
+  controllers: [TestValidationController],
 })
 export class AppModule {}
