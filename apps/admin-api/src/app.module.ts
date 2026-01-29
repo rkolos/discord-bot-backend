@@ -1,4 +1,5 @@
 import {
+  ClickHouseModule,
   DatabaseModule,
   RedisModule,
   SharedConfigModule,
@@ -10,6 +11,7 @@ import { Module } from '@nestjs/common';
     SharedConfigModule,
     DatabaseModule,
     RedisModule.forRootAsync(),
+    ClickHouseModule.forRootAsync(),
   ],
 })
 export class AppModule {}
