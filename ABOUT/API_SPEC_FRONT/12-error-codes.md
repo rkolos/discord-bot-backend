@@ -19,6 +19,7 @@ Complete list of error codes used throughout the API.
 - `TOKEN_EXPIRED` - JWT token has expired
 - `TOKEN_INVALID` - JWT token is invalid or malformed
 - `OAUTH_FAILED` - Discord OAuth authentication failed
+- `DISCORD_TOKEN_EXPIRED` - Discord token expired or missing; re-login required to refresh guild list
 - `UNAUTHORIZED` - Authentication required
 
 ---

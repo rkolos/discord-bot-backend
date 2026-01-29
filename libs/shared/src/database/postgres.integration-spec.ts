@@ -3,6 +3,7 @@ import { join } from 'path';
 import { DataSource } from 'typeorm';
 import {
   ActivityLog,
+  AdminRefreshToken,
   AdminUser,
   Company,
   CompanyInvite,
@@ -23,6 +24,7 @@ import {
 
 const ENTITIES = [
   ActivityLog,
+  AdminRefreshToken,
   AdminUser,
   Company,
   CompanyInvite,

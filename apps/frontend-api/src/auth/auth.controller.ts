@@ -67,6 +67,11 @@ export class AuthController {
     const user = await this.authService.upsertUserFromDiscord(discordUser);
     const { accessToken, refreshToken, expiresAt } =
       await this.authService.createSession(user);
+    await this.discordOAuth.storeDiscordToken(
+      user.id,
+      tokenResponse.access_token,
+      tokenResponse.expires_in,
+    );
     const isProduction =
       this.sharedConfig.isDevelopment === false;
     res.cookie(REFRESH_TOKEN_COOKIE_NAME, refreshToken, {
@@ -124,6 +129,7 @@ export class AuthController {
   ): Promise<{ data: { success: true } }> {
     const refreshTokenValue = req.cookies?.[REFRESH_TOKEN_COOKIE_NAME];
     await this.authService.logout(user.id, refreshTokenValue);
+    await this.discordOAuth.deleteDiscordToken(user.id);
     const isProduction = this.sharedConfig.isDevelopment === false;
     res.clearCookie(REFRESH_TOKEN_COOKIE_NAME, {
       path: COOKIE_PATH,

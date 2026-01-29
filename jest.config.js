@@ -7,6 +7,8 @@ module.exports = {
     '**/*.spec.ts',
     '**/*.integration-spec.ts',
   ],
+  // Colima: DOCKER_HOST для интеграционных тестов (Testcontainers)
+  setupFiles: ['<rootDir>/scripts/jest-e2e-colima-setup.js'],
   moduleNameMapper: {
     '^@app/shared$': '<rootDir>/libs/shared/src',
     '^@app/shared/(.*)$': '<rootDir>/libs/shared/src/$1',

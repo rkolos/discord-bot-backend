@@ -5,6 +5,7 @@ import {
 } from '@app/shared';
 import { Module } from '@nestjs/common';
 import { AuthModule } from './auth/auth.module';
+import { GuildsModule } from './guilds/guilds.module';
 import { TestValidationController } from './test-validation.controller';
 
 @Module({
@@ -13,6 +14,7 @@ import { TestValidationController } from './test-validation.controller';
     DatabaseModule,
     RedisModule.forRootAsync(),
     AuthModule,
+    GuildsModule,
   ],
   controllers: [TestValidationController],
 })

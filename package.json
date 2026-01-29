@@ -25,7 +25,8 @@
     "start:dev:background-worker": "nest start --watch background-worker",
     "migration:generate": "typeorm-ts-node-commonjs migration:generate -d libs/shared/src/database/data-source.ts",
     "migration:run": "typeorm-ts-node-commonjs migration:run -d libs/shared/src/database/data-source.ts",
-    "migration:revert": "typeorm-ts-node-commonjs migration:revert -d libs/shared/src/database/data-source.ts"
+    "migration:revert": "typeorm-ts-node-commonjs migration:revert -d libs/shared/src/database/data-source.ts",
+    "create-super-admin": "ts-node scripts/create-super-admin.ts"
   },
   "dependencies": {
     "@clickhouse/client": "^1.8.0",
@@ -36,8 +37,10 @@
     "@nestjs/jwt": "^11.0.2",
     "@nestjs/passport": "^10.0.0",
     "@nestjs/platform-express": "^10.0.0",
+    "@nestjs/throttler": "^6.0.0",
     "@nestjs/typeorm": "^10.0.0",
     "axios": "^1.13.4",
+    "bcrypt": "^5.1.1",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.1",
     "ioredis": "^5.0.4",
@@ -57,6 +60,7 @@
     "@testcontainers/clickhouse": "^11.11.0",
     "@testcontainers/postgresql": "^11.11.0",
     "@testcontainers/redis": "^11.11.0",
+    "@types/bcrypt": "^5.0.2",
     "@types/cookie-parser": "^1.4.6",
     "@types/express": "^5.0.6",
     "@types/jest": "^30.0.0",

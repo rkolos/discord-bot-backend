@@ -6,6 +6,7 @@ import { SharedConfigModule } from '../config/shared-config.module';
 import { SharedConfigService } from '../config/shared-config.service';
 import {
   ActivityLog,
+  AdminRefreshToken,
   AdminUser,
   Company,
   CompanyInvite,
@@ -26,6 +27,7 @@ import {
 
 const ENTITIES = [
   ActivityLog,
+  AdminRefreshToken,
   AdminUser,
   Company,
   CompanyInvite,

@@ -9,6 +9,7 @@ const DISCORD_API_BASE = 'https://discord.com/api/v10';
 const OAUTH_AUTHORIZE_URL = 'https://discord.com/api/oauth2/authorize';
 const SCOPES = ['identify', 'email', 'guilds'];
 const STATE_REDIS_KEY_PREFIX = 'frontend-api:auth:discord:state:';
+const DISCORD_TOKEN_REDIS_KEY_PREFIX = 'frontend-api:auth:discord-token:';
 const STATE_TTL_SECONDS = 600;
 
 export interface DiscordTokenResponse {
@@ -117,5 +118,24 @@ export class DiscordOAuthService {
         HttpStatus.UNAUTHORIZED,
       );
     }
+  }
+
+  async storeDiscordToken(
+    userId: string,
+    accessToken: string,
+    expiresInSeconds: number,
+  ): Promise<void> {
+    const key = DISCORD_TOKEN_REDIS_KEY_PREFIX + userId;
+    await this.redis.set(key, accessToken, expiresInSeconds);
+  }
+
+  async getDiscordToken(userId: string): Promise<string | null> {
+    const key = DISCORD_TOKEN_REDIS_KEY_PREFIX + userId;
+    return this.redis.get(key);
+  }
+
+  async deleteDiscordToken(userId: string): Promise<void> {
+    const key = DISCORD_TOKEN_REDIS_KEY_PREFIX + userId;
+    await this.redis.del(key);
   }
 }

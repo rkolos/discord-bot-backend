@@ -59,6 +59,8 @@ export class SharedConfigService {
     }
     return {
       jwtSecret: this.configService.get<string>('JWT_SECRET') ?? '',
+      adminJwtSecret:
+        this.configService.get<string>('ADMIN_JWT_SECRET') ?? '',
       encryptionKeyV1,
     };
   }

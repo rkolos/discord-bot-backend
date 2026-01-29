@@ -11,6 +11,7 @@ Complete list of all error codes returned by the API.
 | `GUILD_NOT_FOUND` | 404 | Guild with specified ID not found |
 | `SHARD_NOT_FOUND` | 404 | Shard with specified ID not found |
 | `QUEUE_NOT_FOUND` | 404 | Queue with specified name not found |
+| `RATE_LIMIT_EXCEEDED` | 429 | Rate limit exceeded |
 | `VALIDATION_ERROR` | 400 | Request validation failed (check `details` field) |
 | `USER_ALREADY_BANNED` | 400 | User is already banned |
 | `USER_NOT_BANNED` | 400 | User is not banned |

@@ -18,6 +18,7 @@ export function setTestIntegrationEnv(overrides: Record<string, string | number 
     CLICKHOUSE_PASSWORD: 'default',
     CLICKHOUSE_DB: 'default',
     JWT_SECRET: 'test-jwt-secret-32-chars!!!',
+    ADMIN_JWT_SECRET: 'test-admin-jwt-secret',
     ENCRYPTION_KEY_V1: 'a'.repeat(32),
     FRONTEND_API_URL: 'http://localhost:3000',
     ADMIN_API_URL: 'http://localhost:3001',

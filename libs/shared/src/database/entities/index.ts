@@ -1,6 +1,7 @@
 export * from './user.entity';
 export * from './refresh-token.entity';
 export * from './admin-user.entity';
+export * from './admin-refresh-token.entity';
 export * from './company.entity';
 export * from './company-member.entity';
 export * from './company-invite.entity';

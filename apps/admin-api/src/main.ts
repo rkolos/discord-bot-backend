@@ -1,6 +1,7 @@
 import { BadRequestException, ValidationPipe } from '@nestjs/common';
 import { HttpAdapterHost } from '@nestjs/core';
 import { NestFactory } from '@nestjs/core';
+import * as cookieParser from 'cookie-parser';
 import { AllExceptionsFilter } from '@app/shared';
 import { AppModule } from './app.module';
 
@@ -17,6 +18,7 @@ async function bootstrap() {
       exceptionFactory: (errors) => new BadRequestException(errors),
     }),
   );
+  app.use(cookieParser());
   const port = process.env.PORT ?? 3001;
   await app.listen(port);
 }

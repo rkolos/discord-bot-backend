@@ -28,6 +28,7 @@ export interface IClickHouseConfig {
 
 export interface IAuthConfig {
   jwtSecret: string;
+  adminJwtSecret?: string;
   encryptionKeyV1: string;
 }
 

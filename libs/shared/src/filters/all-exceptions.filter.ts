@@ -51,6 +51,8 @@ function pickCodeByStatus(status: number): string {
       return 'NOT_FOUND';
     case HttpStatus.BAD_REQUEST:
       return 'VALIDATION_ERROR';
+    case HttpStatus.TOO_MANY_REQUESTS:
+      return 'RATE_LIMIT_EXCEEDED';
     case HttpStatus.INTERNAL_SERVER_ERROR:
     default:
       return 'INTERNAL_SERVER_ERROR';

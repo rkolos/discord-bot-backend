@@ -33,6 +33,6 @@ import { JwtStrategy } from './jwt.strategy';
   ],
   controllers: [AuthController],
   providers: [AuthService, DiscordOAuthService, JwtStrategy],
-  exports: [AuthService],
+  exports: [AuthService, DiscordOAuthService],
 })
 export class AuthModule {}

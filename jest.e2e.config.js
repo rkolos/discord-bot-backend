@@ -4,6 +4,8 @@ module.exports = {
   testEnvironment: 'node',
   roots: ['<rootDir>/apps'],
   testMatch: ['**/*.e2e-spec.ts'],
+  // Colima: DOCKER_HOST и TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE до запуска Testcontainers
+  setupFiles: ['<rootDir>/scripts/jest-e2e-colima-setup.js'],
   moduleNameMapper: {
     '^@app/shared$': '<rootDir>/libs/shared/src',
     '^@app/shared/(.*)$': '<rootDir>/libs/shared/src/$1',

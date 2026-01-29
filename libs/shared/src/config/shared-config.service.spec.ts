@@ -186,6 +186,17 @@ describe('SharedConfigService', () => {
       const svc = new SharedConfigService(config);
       expect(svc.auth.encryptionKeyV1).toBe(key);
       expect(svc.auth.jwtSecret).toBe('jwt');
+      expect(svc.auth.adminJwtSecret).toBe('');
+    });
+
+    it('returns adminJwtSecret when ADMIN_JWT_SECRET is set', () => {
+      const config = mockConfigService({
+        ENCRYPTION_KEY_V1: 'a'.repeat(32),
+        JWT_SECRET: 'jwt',
+        ADMIN_JWT_SECRET: 'admin-secret',
+      });
+      const svc = new SharedConfigService(config);
+      expect(svc.auth.adminJwtSecret).toBe('admin-secret');
     });
 
     it('uses default empty string for missing JWT_SECRET', () => {

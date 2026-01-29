@@ -4,6 +4,7 @@ import { RedisContainer } from '@testcontainers/redis';
 import { Test } from '@nestjs/testing';
 import { join } from 'path';
 import { DataSource } from 'typeorm';
+import * as bcrypt from 'bcrypt';
 const request = require('supertest');
 
 function parseHttpUrl(url: string): { host: string; port: number } {
@@ -50,7 +51,9 @@ describe('Admin API E2E (validation contract)', () => {
 
     const {
       ActivityLog,
+      AdminRefreshToken,
       AdminUser,
+      AdminUserRole,
       Company,
       CompanyInvite,
       CompanyMember,
@@ -71,6 +74,7 @@ describe('Admin API E2E (validation contract)', () => {
 
     const ENTITIES = [
       ActivityLog,
+      AdminRefreshToken,
       AdminUser,
       Company,
       CompanyInvite,
@@ -102,6 +106,17 @@ describe('Admin API E2E (validation contract)', () => {
     });
     await ds.initialize();
     await ds.runMigrations();
+
+    const adminRepo = ds.getRepository(AdminUser);
+    const passwordHash = await bcrypt.hash('adminpassword', 10);
+    await adminRepo.save(
+      adminRepo.create({
+        email: 'admin@admin.com',
+        name: 'adminname',
+        role: AdminUserRole.SUPER_ADMIN,
+        passwordHash,
+      }),
+    );
 
     const { AppModule } = await import('../src/app.module');
     const { BadRequestException, ValidationPipe } = await import('@nestjs/common');
@@ -150,5 +165,35 @@ describe('Admin API E2E (validation contract)', () => {
     expect(body.error?.details).toBeDefined();
     expect(typeof body.error?.details).toBe('object');
     expect(Object.keys(body.error?.details ?? {}).length).toBeGreaterThan(0);
+  });
+
+  it('POST /api/auth/login returns accessToken and user for valid credentials', async () => {
+    const res = await request(app.getHttpServer())
+      .post('/api/auth/login')
+      .send({ email: 'admin@admin.com', password: 'adminpassword' })
+      .expect(200);
+
+    const body = res.body as {
+      data?: { accessToken?: string; user?: { id: string; email: string; name: string; role: string } };
+    };
+    expect(body.data).toBeDefined();
+    expect(body.data?.accessToken).toBeDefined();
+    expect(typeof body.data?.accessToken).toBe('string');
+    expect(body.data?.user).toBeDefined();
+    expect(body.data?.user?.email).toBe('admin@admin.com');
+    expect(body.data?.user?.name).toBe('adminname');
+    expect(body.data?.user?.role).toBe('super_admin');
+    expect(res.headers['set-cookie']).toBeDefined();
+    expect(res.headers['set-cookie'].some((c: string) => c.includes('refresh_token'))).toBe(true);
+  });
+
+  it('POST /api/auth/login returns INVALID_CREDENTIALS for wrong password', async () => {
+    const res = await request(app.getHttpServer())
+      .post('/api/auth/login')
+      .send({ email: 'admin@admin.com', password: 'wrongpassword' })
+      .expect(401);
+
+    const body = res.body as { error?: { code?: string; message?: string } };
+    expect(body.error?.code).toBe('INVALID_CREDENTIALS');
   });
 });

@@ -22,11 +22,12 @@ export const envValidationSchema = Joi.object({
   CLICKHOUSE_HOST: Joi.string().required(),
   CLICKHOUSE_PORT: Joi.number().default(8123),
   CLICKHOUSE_USER: Joi.string().required(),
-  CLICKHOUSE_PASSWORD: Joi.string().required(),
+  CLICKHOUSE_PASSWORD: Joi.string().allow('').required(),
   CLICKHOUSE_DB: Joi.string().required(),
 
   // Безопасность и JWT
   JWT_SECRET: Joi.string().required(),
+  ADMIN_JWT_SECRET: Joi.string().optional(),
   ENCRYPTION_KEY_V1: Joi.string().length(32).required(),
   NODE_ENV: Joi.string()
     .valid('development', 'production', 'test', 'stage')

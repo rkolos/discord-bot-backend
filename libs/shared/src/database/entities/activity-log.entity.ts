@@ -7,6 +7,7 @@ import {
   JoinColumn,
 } from 'typeorm';
 import { User } from './user.entity';
+import { AdminUser } from './admin-user.entity';
 
 @Entity('activity_log')
 export class ActivityLog {
@@ -19,6 +20,13 @@ export class ActivityLog {
   @ManyToOne(() => User, { onDelete: 'SET NULL' })
   @JoinColumn({ name: 'user_id' })
   user: User | null;
+
+  @Column({ name: 'admin_user_id', type: 'uuid', nullable: true })
+  adminUserId: string | null;
+
+  @ManyToOne(() => AdminUser, { onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'admin_user_id' })
+  adminUser: AdminUser | null;
 
   @Column({ name: 'action', type: 'text' })
   action: string;

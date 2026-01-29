@@ -4,6 +4,7 @@ import { join } from 'path';
 import { DataSource } from 'typeorm';
 import {
   ActivityLog,
+  AdminRefreshToken,
   AdminUser,
   Company,
   CompanyInvite,
@@ -41,6 +42,7 @@ export const AppDataSource = new DataSource({
   database: process.env['POSTGRES_DB'] ?? '',
   entities: [
     ActivityLog,
+    AdminRefreshToken,
     AdminUser,
     Company,
     CompanyInvite,

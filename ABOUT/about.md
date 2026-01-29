@@ -46,6 +46,8 @@ _Фиксация версий и инструментов из твоего о�
         
 -   **3.3. Инфраструктура:** ✅ Docker, DigitalOcean Droplets (требования к ресурсам). _См. `spec/03-03-infrastruktura.md`_
     
+-   **3.4. Локальная разработка (Colima):** ✅ Использование Colima вместо Docker Desktop на macOS, настройка DOCKER_HOST, сборка и тесты. _См. `spec/03-04-colima-razrabotka.md`_
+    
 
 ## 4\. Проектирование Баз Данных
 
