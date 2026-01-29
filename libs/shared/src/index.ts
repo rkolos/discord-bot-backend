@@ -1,2 +1,2 @@
-export * from './config/env-validation.schema';
+export * from './config';
 export * from './database/entities';
