@@ -7,6 +7,7 @@ import { Module } from '@nestjs/common';
 import { AuthModule } from './auth/auth.module';
 import { GuildsModule } from './guilds/guilds.module';
 import { CountersModule } from './counters/counters.module';
+import { LogsModule } from './logs/logs.module';
 import { TestValidationController } from './test-validation.controller';
 
 @Module({
@@ -17,6 +18,7 @@ import { TestValidationController } from './test-validation.controller';
     AuthModule,
     GuildsModule,
     CountersModule,
+    LogsModule,
   ],
   controllers: [TestValidationController],
 })

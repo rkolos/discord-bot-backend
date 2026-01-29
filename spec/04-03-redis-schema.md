@@ -114,4 +114,11 @@ sn:prod:frontend-api:auth:session:{sessionId}
   - **Consumer:** Background Worker (History Sync Worker).
   - **Приоритет:** самый низкий среди очередей воркеров.
 
+### Конфигурация логов событий
+
+- `sn:{env}:workers-queue-logs-config` (имя очереди в BullMQ без двоеточий: `workers-queue-logs-config`)
+  - **Назначение:** обновление кэша подписок на события при изменении настроек логирования (channel_id, enabled в guild_log_settings).
+  - **Producer:** Frontend API (при PATCH настроек логов).
+  - **Consumer:** Background Worker (воркеры обновляют кэш подписок на события).
+
 > **Важно:** имена очередей в BullMQ должны совпадать в producer/consumer и быть одинаковыми во всех средах через префикс `sn:{env}`.

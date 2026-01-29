@@ -111,6 +111,15 @@ Workspace/компания для групповой работы и билли�
 - `allow_public_widgets` BOOLEAN NOT NULL DEFAULT true
 - `updated_at` TIMESTAMPTZ NOT NULL
 
+### 9.1) guild_log_settings
+Настройки логирования событий гильдии (вход/выход участников, удаление/редактирование сообщений, смена ролей, голосовые каналы).
+- `guild_id` UUID PK FK -> guilds.id ON DELETE CASCADE
+- `event_type` TEXT NOT NULL (один из: member_join, member_leave, message_delete, message_edit, role_update, voice_change)
+- Уникальность по (guild_id, event_type) — одна запись на тип события на гильдию
+- `channel_id` TEXT NULL (Snowflake канала Discord; NULL = логи для этого типа отключены)
+- `enabled` BOOLEAN NOT NULL DEFAULT true
+- `updated_at` TIMESTAMPTZ NOT NULL
+
 ### 10) counters
 Каунтеры (stat/goal/clock).
 - `id` UUID PK  
@@ -196,11 +205,11 @@ Workspace/компания для групповой работы и билли�
 - **Связи (FK)** обязаны покрывать:
   - `guilds.owner_id -> users.id`
   - `company_members.user_id -> users.id`, `company_members.company_id -> companies.id`
-  - `counters.guild_id -> guilds.id`, `widgets.guild_id -> guilds.id`, `guild_modules.guild_id -> guilds.id`, `server_settings.guild_id -> guilds.id`
+  - `counters.guild_id -> guilds.id`, `widgets.guild_id -> guilds.id`, `guild_modules.guild_id -> guilds.id`, `server_settings.guild_id -> guilds.id`, `guild_log_settings.guild_id -> guilds.id`
   - `refresh_tokens.user_id -> users.id`, `user_subscriptions.user_id -> users.id`, `user_subscriptions.plan_id -> subscription_plans.id`, `plan_limits.plan_id -> subscription_plans.id`, `invoices.user_id -> users.id`, `activity_log.user_id -> users.id`
 - **Индексы** для ускорения выборок:
   - `guilds(owner_id)`, `guilds(discord_guild_id)`, `guilds(status)`
-  - `counters(guild_id)`, `widgets(guild_id)`, `server_settings(guild_id)`
+  - `counters(guild_id)`, `widgets(guild_id)`, `server_settings(guild_id)`, `guild_log_settings(guild_id)`
   - `company_members(company_id)`, `company_members(user_id)`
   - `refresh_tokens(user_id)`, `refresh_tokens(expires_at)`
   - `users(email)`, `users(discord_id)`
@@ -212,6 +221,7 @@ Workspace/компания для групповой работы и билли�
   - `widgets.guild_id` → `guilds.id`
   - `guild_modules.guild_id` → `guilds.id`
   - `server_settings.guild_id` → `guilds.id`
+  - `guild_log_settings.guild_id` → `guilds.id`
 - **activity_log** и **invoices** (связь с `users.id`): для сохранения истории аудита и финансовой отчётности используется **ON DELETE SET NULL** для поля `user_id`. При удалении пользователя запись в `activity_log` и `invoices` остаётся, `user_id` устанавливается в NULL. Удаление пользователя, имеющего активные счета (например, со статусом `pending`), может дополнительно ограничиваться на уровне приложения согласно политике хранения финансовой истории.
 
 ## 4.1.3 JSONB‑валидация

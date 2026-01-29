@@ -17,7 +17,7 @@ import { GuildIdParamDto } from './dto/guild-id-param.dto';
 import { PatchGuildModulesDto } from './dto/patch-guild-modules.dto';
 import { PatchGuildTokenDto } from './dto/patch-guild-token.dto';
 import { GuildAdminGuard } from './guards/guild-admin.guard';
-import type { GuildSettingsResponseDto } from './guilds.service';
+import type { GuildSettingsResponseDto, GuildChannelDto } from './guilds.service';
 
 @Controller('guilds')
 export class GuildsController {
@@ -72,6 +72,15 @@ export class GuildsController {
     @Body() dto: PatchGuildTokenDto,
   ): Promise<{ data: { botToken: string | null } }> {
     const data = await this.guildsService.updateToken(params.guildId, dto);
+    return { data };
+  }
+
+  @Get(':guildId/channels')
+  @UseGuards(JwtAuthGuard, GuildAdminGuard)
+  async getChannels(
+    @Param() params: GuildIdParamDto,
+  ): Promise<{ data: GuildChannelDto[] }> {
+    const data = await this.guildsService.getChannelsForGuild(params.guildId);
     return { data };
   }
 }

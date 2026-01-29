@@ -32,6 +32,8 @@ import type { PatchGuildTokenDto } from './dto/patch-guild-token.dto';
 
 const DISCORD_API_BASE = 'https://discord.com/api/v10';
 const GUILDS_CACHE_KEY_PREFIX = 'guilds:cache:';
+/** Discord channel type: GUILD_TEXT */
+const CHANNEL_TYPE_TEXT = 0;
 const GUILDS_CACHE_TTL_SECONDS = 300; // 5 min
 
 /** Administrator = 0x8, Manage Guild = 0x20 */
@@ -71,6 +73,11 @@ export interface GuildSettingsResponseDto {
   shareAnalytics: boolean;
   allowPublicWidgets: boolean;
   modules: Array<{ id: string; name: string; enabled: boolean; hasError: boolean }>;
+}
+
+export interface GuildChannelDto {
+  id: string;
+  name: string;
 }
 
 @Injectable()
@@ -396,5 +403,47 @@ export class GuildsService {
     await this.serverSettingsRepository.save(settings);
 
     return { guildId: savedGuild.id };
+  }
+
+  /**
+   * Возвращает список текстовых каналов гильдии из Discord API (бот должен быть на сервере, токен настроен).
+   * При отсутствии токена или ошибке Discord API возвращает пустой массив.
+   */
+  async getChannelsForGuild(discordGuildId: string): Promise<GuildChannelDto[]> {
+    const guild = await this.findGuildByDiscordId(discordGuildId);
+    if (!guild) {
+      throw new NotFoundException({
+        code: 'GUILD_NOT_FOUND',
+        message: 'Guild not found or access denied',
+      });
+    }
+    const settings = await this.serverSettingsRepository.findOne({
+      where: { guildId: guild.id },
+    });
+    if (!settings?.botTokenEncrypted || settings.botTokenEncrypted.length === 0) {
+      return [];
+    }
+    let token: string;
+    try {
+      token = this.crypto.decrypt(settings.botTokenEncrypted);
+    } catch {
+      return [];
+    }
+    try {
+      const response = await firstValueFrom(
+        this.httpService.get<Array<{ id: string; name: string; type: number }>>(
+          `${DISCORD_API_BASE}/guilds/${discordGuildId}/channels`,
+          {
+            headers: { Authorization: `Bot ${token}` },
+          },
+        ),
+      );
+      const channels = response.data ?? [];
+      return channels
+        .filter((c) => c.type === CHANNEL_TYPE_TEXT)
+        .map((c) => ({ id: c.id, name: c.name }));
+    } catch {
+      return [];
+    }
   }
 }

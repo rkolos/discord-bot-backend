@@ -44,6 +44,7 @@ describe('Frontend API E2E (validation contract)', () => {
       CompanyMember,
       Counter,
       Guild,
+      GuildLogSetting,
       GuildModule,
       Invoice,
       PlanLimits,
@@ -65,6 +66,7 @@ describe('Frontend API E2E (validation contract)', () => {
       CompanyMember,
       Counter,
       Guild,
+      GuildLogSetting,
       GuildModule,
       Invoice,
       PlanLimits,
@@ -235,9 +237,10 @@ describe('Frontend API E2E (counters)', () => {
       }),
     );
     seededUser = user;
+    const discordGuildId = String(111222333444555666n + BigInt(Date.now() % 1000000));
     const guild = await guildRepo.save(
       guildRepo.create({
-        discordGuildId: '111222333444555666',
+        discordGuildId,
         name: 'E2E Test Guild',
         ownerId: user.id,
         status: GuildStatus.ACTIVE,
@@ -306,5 +309,40 @@ describe('Frontend API E2E (counters)', () => {
     expect(body.error).toBeDefined();
     expect(body.error?.code).toBe('FORBIDDEN');
     expect(body.error?.message).toBeDefined();
+  });
+
+  it('PATCH /api/guilds/:guildId/logs/settings returns 403 FORBIDDEN when user has no admin on guild', async () => {
+    const otherGuildId = '999888777666555444';
+    const res = await request(app.getHttpServer())
+      .patch(`/api/guilds/${otherGuildId}/logs/settings`)
+      .set('Authorization', 'Bearer e2e-test-token')
+      .send({
+        settings: [
+          { eventType: 'member_join', channelId: '987654321098765432', enabled: true },
+        ],
+      })
+      .expect(403);
+
+    const body = res.body as { error?: { code?: string; message?: string } };
+    expect(body.error).toBeDefined();
+    expect(body.error?.code).toBe('FORBIDDEN');
+    expect(body.error?.message).toBeDefined();
+  });
+
+  it('PATCH /api/guilds/:guildId/logs/settings returns 400 VALIDATION_ERROR when channelId is invalid', async () => {
+    const res = await request(app.getHttpServer())
+      .patch(`/api/guilds/${seededGuild.discordGuildId}/logs/settings`)
+      .set('Authorization', 'Bearer e2e-test-token')
+      .send({
+        settings: [
+          { eventType: 'member_join', channelId: 'not-a-snowflake', enabled: true },
+        ],
+      })
+      .expect(400);
+
+    const body = res.body as { error?: { code?: string; message?: string; details?: Record<string, string> } };
+    expect(body.error).toBeDefined();
+    expect(body.error?.code).toBe('VALIDATION_ERROR');
+    expect(body.error?.details ?? body.error?.message).toBeDefined();
   });
 });
