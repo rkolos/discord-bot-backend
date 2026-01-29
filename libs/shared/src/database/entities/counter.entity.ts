@@ -20,6 +20,7 @@ export enum CounterMetric {
   MESSAGES = 'messages',
   VOICE = 'voice',
   ONLINE = 'online',
+  BOTS = 'bots',
 }
 
 export enum CounterStatus {

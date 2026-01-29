@@ -6,3 +6,4 @@ export * from './database/entities';
 export * from './filters';
 export * from './pipes';
 export * from './redis';
+export * from './validators';

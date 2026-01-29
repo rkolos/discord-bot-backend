@@ -20,6 +20,6 @@ import { GuildAdminGuard } from './guards/guild-admin.guard';
   ],
   controllers: [GuildsController],
   providers: [GuildsService, GuildAdminGuard],
-  exports: [GuildsService],
+  exports: [GuildsService, GuildAdminGuard],
 })
 export class GuildsModule {}
