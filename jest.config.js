@@ -6,6 +6,7 @@ module.exports = {
   testMatch: [
     '**/*.spec.ts',
     '**/*.integration-spec.ts',
+    '**/*.performance-spec.ts',
   ],
   // Colima: DOCKER_HOST для интеграционных тестов (Testcontainers)
   setupFiles: ['<rootDir>/scripts/jest-e2e-colima-setup.js'],

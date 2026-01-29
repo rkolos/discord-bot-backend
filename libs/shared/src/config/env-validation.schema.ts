@@ -39,4 +39,8 @@ export const envValidationSchema = Joi.object({
   DISCORD_CLIENT_ID: Joi.string().required(),
   DISCORD_CLIENT_SECRET: Joi.string().required(),
   DISCORD_OAUTH_REDIRECT_URI: Joi.string().uri().required(),
+
+  // Ingestor Worker (optional; used only by ingestor-worker)
+  INGESTOR_BATCH_SIZE: Joi.number().min(500).max(1000).optional(),
+  INGESTOR_BATCH_INTERVAL_MS: Joi.number().min(1000).optional(),
 });

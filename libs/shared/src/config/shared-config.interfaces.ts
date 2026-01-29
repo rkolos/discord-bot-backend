@@ -37,3 +37,8 @@ export interface IDiscordConfig {
   clientSecret: string;
   oauthRedirectUri: string;
 }
+
+export interface IIngestorConfig {
+  batchSize: number;
+  batchIntervalMs: number;
+}

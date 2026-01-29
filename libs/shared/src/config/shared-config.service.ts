@@ -5,6 +5,7 @@ import type {
   IClickHouseConfig,
   IDatabaseConfig,
   IDiscordConfig,
+  IIngestorConfig,
   IRedisConfig,
 } from './shared-config.interfaces';
 
@@ -76,5 +77,13 @@ export class SharedConfigService {
 
   get isDevelopment(): boolean {
     return this.configService.get<string>('NODE_ENV') === 'development';
+  }
+
+  get ingestor(): IIngestorConfig {
+    return {
+      batchSize: this.configService.get<number>('INGESTOR_BATCH_SIZE') ?? 1000,
+      batchIntervalMs:
+        this.configService.get<number>('INGESTOR_BATCH_INTERVAL_MS') ?? 5000,
+    };
   }
 }

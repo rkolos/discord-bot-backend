@@ -1,11 +1,7 @@
-import { ClickHouseModule, RedisModule, SharedConfigModule } from '@app/shared';
 import { Module } from '@nestjs/common';
+import { IngestorModule } from './ingestor/ingestor.module';
 
 @Module({
-  imports: [
-    SharedConfigModule,
-    RedisModule.forRootAsync(),
-    ClickHouseModule.forRootAsync(),
-  ],
+  imports: [IngestorModule],
 })
 export class AppModule {}

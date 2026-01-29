@@ -21,6 +21,8 @@ export interface ClickHouseInsertParams {
   table: string;
   values: unknown[];
   format: 'JSONEachRow';
+  /** Настройки ClickHouse (напр. wait_for_async_insert) для интеграционных тестов. */
+  clickhouse_settings?: Record<string, string | number>;
 }
 
 @Injectable()
@@ -67,11 +69,12 @@ export class ClickHouseService implements OnModuleInit {
    * Вставка данных. Параметризация через структуру values, не конкатенация SQL.
    */
   async insert(params: ClickHouseInsertParams): Promise<{ query_id: string; executed: boolean }> {
-    const { table, values, format } = params;
+    const { table, values, format, clickhouse_settings } = params;
     return this.client.insert({
       table,
       values,
       format,
+      ...(clickhouse_settings && { clickhouse_settings }),
     });
   }
 
