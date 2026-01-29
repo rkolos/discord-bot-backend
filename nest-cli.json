@@ -1,0 +1,57 @@
+{
+  "collection": "@nestjs/schematics",
+  "sourceRoot": "apps/frontend-api/src",
+  "monorepo": true,
+  "root": "apps/frontend-api",
+  "compilerOptions": {
+    "deleteOutDir": true,
+    "tsConfigPath": "apps/frontend-api/tsconfig.app.json"
+  },
+  "projects": {
+    "frontend-api": {
+      "type": "application",
+      "root": "apps/frontend-api",
+      "entryFile": "main",
+      "sourceRoot": "apps/frontend-api/src",
+      "compilerOptions": {
+        "tsConfigPath": "apps/frontend-api/tsconfig.app.json"
+      }
+    },
+    "admin-api": {
+      "type": "application",
+      "root": "apps/admin-api",
+      "entryFile": "main",
+      "sourceRoot": "apps/admin-api/src",
+      "compilerOptions": {
+        "tsConfigPath": "apps/admin-api/tsconfig.app.json"
+      }
+    },
+    "bot-service": {
+      "type": "application",
+      "root": "apps/bot-service",
+      "entryFile": "main",
+      "sourceRoot": "apps/bot-service/src",
+      "compilerOptions": {
+        "tsConfigPath": "apps/bot-service/tsconfig.app.json"
+      }
+    },
+    "ingestor": {
+      "type": "application",
+      "root": "apps/ingestor",
+      "entryFile": "main",
+      "sourceRoot": "apps/ingestor/src",
+      "compilerOptions": {
+        "tsConfigPath": "apps/ingestor/tsconfig.app.json"
+      }
+    },
+    "background-worker": {
+      "type": "application",
+      "root": "apps/background-worker",
+      "entryFile": "main",
+      "sourceRoot": "apps/background-worker/src",
+      "compilerOptions": {
+        "tsConfigPath": "apps/background-worker/tsconfig.app.json"
+      }
+    }
+  }
+}
