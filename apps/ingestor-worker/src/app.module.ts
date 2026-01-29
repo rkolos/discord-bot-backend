@@ -1,7 +1,7 @@
-import { SharedConfigModule } from '@app/shared';
+import { RedisModule, SharedConfigModule } from '@app/shared';
 import { Module } from '@nestjs/common';
 
 @Module({
-  imports: [SharedConfigModule],
+  imports: [SharedConfigModule, RedisModule.forRootAsync()],
 })
 export class AppModule {}
