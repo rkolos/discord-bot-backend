@@ -88,7 +88,11 @@ export class AllExceptionsFilter implements ExceptionFilter {
         details = validationToDetails(msg);
         message = 'Validation failed';
       } else {
-        code = pickCodeByStatus(status);
+        const customCode = (obj as { code?: string }).code;
+        code =
+          typeof customCode === 'string' && customCode.length > 0
+            ? customCode
+            : pickCodeByStatus(status);
         if (Array.isArray(msg)) {
           message = msg.map((m) => (typeof m === 'string' ? m : String(m))).join('; ');
         } else if (typeof msg === 'string') {

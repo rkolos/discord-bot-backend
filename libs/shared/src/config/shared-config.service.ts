@@ -67,6 +67,8 @@ export class SharedConfigService {
     return {
       clientId: this.configService.get<string>('DISCORD_CLIENT_ID') ?? '',
       clientSecret: this.configService.get<string>('DISCORD_CLIENT_SECRET') ?? '',
+      oauthRedirectUri:
+        this.configService.get<string>('DISCORD_OAUTH_REDIRECT_URI') ?? '',
     };
   }
 

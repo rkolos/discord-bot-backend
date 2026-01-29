@@ -34,4 +34,5 @@ export interface IAuthConfig {
 export interface IDiscordConfig {
   clientId: string;
   clientSecret: string;
+  oauthRedirectUri: string;
 }

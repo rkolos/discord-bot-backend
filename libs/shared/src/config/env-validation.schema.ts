@@ -37,4 +37,5 @@ export const envValidationSchema = Joi.object({
   ADMIN_API_URL: Joi.string().uri().required(),
   DISCORD_CLIENT_ID: Joi.string().required(),
   DISCORD_CLIENT_SECRET: Joi.string().required(),
+  DISCORD_OAUTH_REDIRECT_URI: Joi.string().uri().required(),
 });

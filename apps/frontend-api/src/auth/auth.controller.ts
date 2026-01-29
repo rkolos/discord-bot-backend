@@ -1,0 +1,84 @@
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Query,
+  HttpCode,
+  HttpStatus,
+  ForbiddenException,
+  Res,
+} from '@nestjs/common';
+import { Response } from 'express';
+import { AuthService } from './auth.service';
+import { DiscordOAuthService } from './discord-oauth.service';
+import { DiscordCallbackDto } from './dto';
+import { SharedConfigService } from '@app/shared';
+
+const REFRESH_TOKEN_COOKIE_NAME = 'refresh_token';
+const COOKIE_MAX_AGE_DAYS = 7;
+const COOKIE_MAX_AGE_SECONDS = COOKIE_MAX_AGE_DAYS * 24 * 60 * 60;
+
+@Controller('auth')
+export class AuthController {
+  constructor(
+    private readonly discordOAuth: DiscordOAuthService,
+    private readonly authService: AuthService,
+    private readonly sharedConfig: SharedConfigService,
+  ) {}
+
+  @Get('discord/login')
+  async discordLogin(
+    @Query('redirect_uri') redirectUriFromQuery?: string,
+  ): Promise<{ url: string }> {
+    const redirectUri =
+      redirectUriFromQuery ?? this.sharedConfig.discord.oauthRedirectUri;
+    const { url } = await this.discordOAuth.buildLoginUrl(redirectUri);
+    return { url };
+  }
+
+  @Post('discord/callback')
+  @HttpCode(HttpStatus.OK)
+  async discordCallback(
+    @Body() dto: DiscordCallbackDto,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<{
+    data: { token: string; user: { id: string; name: string; email: string | null; avatar: string | null } };
+  }> {
+    const valid = await this.discordOAuth.validateState(dto.state);
+    if (!valid) {
+      throw new ForbiddenException('Invalid or expired state');
+    }
+    const redirectUri = this.sharedConfig.discord.oauthRedirectUri;
+    const tokenResponse = await this.discordOAuth.exchangeCodeForToken(
+      dto.code,
+      redirectUri,
+    );
+    const discordUser = await this.discordOAuth.getDiscordUser(
+      tokenResponse.access_token,
+    );
+    const user = await this.authService.upsertUserFromDiscord(discordUser);
+    const { accessToken, refreshToken, expiresAt } =
+      await this.authService.createSession(user);
+    const isProduction =
+      this.sharedConfig.isDevelopment === false;
+    res.cookie(REFRESH_TOKEN_COOKIE_NAME, refreshToken, {
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: 'strict',
+      maxAge: COOKIE_MAX_AGE_SECONDS * 1000,
+      expires: expiresAt,
+    });
+    return {
+      data: {
+        token: accessToken,
+        user: {
+          id: user.id,
+          name: user.username,
+          email: user.email,
+          avatar: user.avatarUrl,
+        },
+      },
+    };
+  }
+}
