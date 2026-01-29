@@ -135,4 +135,140 @@ describe('ClickHouse Ingestor integration (batch insert)', () => {
     expect(rows[0].plan_tier).toBe('free');
     expect(rows[0].payload).toContain('hello');
   });
+
+  it('MV lifecycle: insert into raw_events then aggregated data appears in MV', async () => {
+    const nowRes = await clickhouse.query({
+      query: 'SELECT now() AS t',
+      query_params: {},
+    });
+    const nowJson = (await nowRes.json()) as { t: string }[] | { data?: { t: string }[] };
+    const nowData = Array.isArray(nowJson) ? nowJson : (nowJson as { data?: { t: string }[] }).data ?? [];
+    const chNow = (nowData[0] as { t: string } | undefined)?.t;
+    const base = chNow ? new Date(chNow.replace(' ', 'T') + 'Z') : new Date('2025-01-20T12:00:00Z');
+    const retentionUntil = new Date(base);
+    retentionUntil.setUTCDate(retentionUntil.getUTCDate() + 30);
+    const fmt = (d: Date) =>
+      d.toISOString().slice(0, 19).replace('T', ' ').replace('Z', '');
+    const eventTime = fmt(base);
+    const eventDate = eventTime.slice(0, 10);
+    const guildId = 'd2eebc99-9c0b-4ef8-bb6d-6bb9bd380a22';
+    const userId = 'e3eebc99-9c0b-4ef8-bb6d-6bb9bd380a33';
+
+    const batch = [
+      {
+        event_id: 'f4eebc99-9c0b-4ef8-bb6d-6bb9bd380a01',
+        event_time: eventTime,
+        event_date: eventDate,
+        event_type: 'MESSAGE_CREATE',
+        guild_id: guildId,
+        discord_guild_id: '222333444555666777',
+        user_id: userId,
+        discord_user_id: '888777666555444333',
+        anonymized_hash: null,
+        channel_id: '',
+        role_id: '',
+        command_name: '',
+        plan_tier: 'free',
+        is_bot_generated: 0,
+        payload: '{}',
+        ingested_at: eventTime,
+        retention_until: fmt(retentionUntil),
+        is_historical: 0,
+      },
+      {
+        event_id: 'f4eebc99-9c0b-4ef8-bb6d-6bb9bd380a02',
+        event_time: eventTime,
+        event_date: eventDate,
+        event_type: 'VOICE_STATE_UPDATE',
+        guild_id: guildId,
+        discord_guild_id: '222333444555666777',
+        user_id: userId,
+        discord_user_id: '888777666555444333',
+        anonymized_hash: null,
+        channel_id: '',
+        role_id: '',
+        command_name: '',
+        plan_tier: 'free',
+        is_bot_generated: 0,
+        payload: '{"voiceMinutes":15}',
+        ingested_at: eventTime,
+        retention_until: fmt(retentionUntil),
+        is_historical: 0,
+      },
+      {
+        event_id: 'f4eebc99-9c0b-4ef8-bb6d-6bb9bd380a03',
+        event_time: eventTime,
+        event_date: eventDate,
+        event_type: 'COMMAND_EXECUTED',
+        guild_id: guildId,
+        discord_guild_id: '222333444555666777',
+        user_id: userId,
+        discord_user_id: '888777666555444333',
+        anonymized_hash: null,
+        channel_id: '',
+        role_id: '',
+        command_name: 'stats',
+        plan_tier: 'free',
+        is_bot_generated: 0,
+        payload: '{"isError":0}',
+        ingested_at: eventTime,
+        retention_until: fmt(retentionUntil),
+        is_historical: 0,
+      },
+    ];
+
+    await clickhouse.insert({
+      table: `${db}.raw_events`,
+      values: batch,
+      format: 'JSONEachRow',
+      clickhouse_settings: { wait_for_async_insert: 1 },
+    });
+
+    await clickhouse.exec({ query: `OPTIMIZE TABLE ${db}.raw_events FINAL` });
+    await clickhouse.exec({ query: `OPTIMIZE TABLE ${db}.mv_daily_activity FINAL` });
+    await clickhouse.exec({ query: `OPTIMIZE TABLE ${db}.mv_voice_stats FINAL` });
+    await clickhouse.exec({ query: `OPTIMIZE TABLE ${db}.mv_command_stats FINAL` });
+    await clickhouse.exec({ query: `OPTIMIZE TABLE ${db}.mv_top_members FINAL` });
+
+    const dailyRes = await clickhouse.query({
+      query: `SELECT guild_id, event_date, countIfMerge(messages_count) AS messages, uniqCombinedMerge(unique_users_count) AS users FROM ${db}.mv_daily_activity WHERE guild_id = {guildId:UUID} GROUP BY guild_id, event_date`,
+      query_params: { guildId },
+    });
+    const dailyRows = (await dailyRes.json()) as { guild_id: string; event_date: string; messages: string; users: string }[];
+    const dailyData = Array.isArray(dailyRows) ? dailyRows : (dailyRows as unknown as { data?: typeof dailyRows }).data ?? [];
+    expect(dailyData.length).toBeGreaterThanOrEqual(1);
+    expect(Number(dailyData[0]?.messages ?? 0)).toBeGreaterThanOrEqual(1);
+
+    const voiceRes = await clickhouse.query({
+      query: `SELECT guild_id, user_id, sum(voice_minutes) AS voice_minutes FROM ${db}.mv_voice_stats WHERE guild_id = {guildId:UUID} GROUP BY guild_id, user_id`,
+      query_params: { guildId },
+    });
+    const voiceRows = (await voiceRes.json()) as { voice_minutes: string }[];
+    const voiceData = Array.isArray(voiceRows) ? voiceRows : (voiceRows as unknown as { data?: typeof voiceRows }).data ?? [];
+    expect(voiceData.length).toBeGreaterThanOrEqual(1);
+    expect(Number(voiceData[0]?.voice_minutes ?? 0)).toBe(15);
+
+    const cmdRes = await clickhouse.query({
+      query: `SELECT guild_id, command_name, sum(execution_count) AS cnt FROM ${db}.mv_command_stats WHERE guild_id = {guildId:UUID} GROUP BY guild_id, command_name`,
+      query_params: { guildId },
+    });
+    const cmdRows = (await cmdRes.json()) as { command_name: string; cnt: string }[];
+    const cmdData = Array.isArray(cmdRows) ? cmdRows : (cmdRows as unknown as { data?: typeof cmdRows }).data ?? [];
+    expect(cmdData.length).toBeGreaterThanOrEqual(1);
+    expect(cmdData.some((r) => r.command_name === 'stats')).toBe(true);
+  });
+
+  it('timezone consistency: today from ClickHouse now() used for overview window', async () => {
+    const nowRes = await clickhouse.query({
+      query: 'SELECT now() AS t, toDate(now()) AS today',
+      query_params: {},
+    });
+    const nowJson = (await nowRes.json()) as { t: string; today: string }[] | { data?: { t: string; today: string }[] };
+    const nowData = Array.isArray(nowJson) ? nowJson : (nowJson as { data?: { t: string; today: string }[] }).data ?? [];
+    const row = nowData[0] as { t: string; today: string } | undefined;
+    expect(row).toBeDefined();
+    expect(row?.today).toBeDefined();
+    const todayStr = String(row?.today ?? '').slice(0, 10);
+    expect(todayStr).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
 });

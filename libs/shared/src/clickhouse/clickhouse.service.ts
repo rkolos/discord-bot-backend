@@ -204,6 +204,23 @@ export class ClickHouseService implements OnModuleInit {
     `;
     await this.exec({ query: mvCommandStats });
 
+    const mvVoiceStats = `
+      CREATE MATERIALIZED VIEW IF NOT EXISTS ${database}.mv_voice_stats
+      ENGINE = SummingMergeTree
+      PARTITION BY toStartOfWeek(event_date)
+      ORDER BY (guild_id, user_id, event_date)
+      SETTINGS allow_nullable_key = 1
+      AS SELECT
+        guild_id,
+        user_id,
+        event_date,
+        sum(toUInt64(JSONExtractInt(payload, 'voiceMinutes'))) AS voice_minutes
+      FROM ${tableRawEvents}
+      WHERE event_type = 'VOICE_STATE_UPDATE'
+      GROUP BY guild_id, user_id, event_date
+    `;
+    await this.exec({ query: mvVoiceStats });
+
     const mvTopMembers = `
       CREATE MATERIALIZED VIEW IF NOT EXISTS ${database}.mv_top_members
       ENGINE = SummingMergeTree

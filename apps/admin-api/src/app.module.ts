@@ -10,6 +10,7 @@ import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { TestValidationController } from './test-validation.controller';
 import { AuthModule } from './auth/auth.module';
 import { AdminAuthGuard } from './auth/admin-auth.guard';
+import { StatsModule } from './stats/stats.module';
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { AdminAuthGuard } from './auth/admin-auth.guard';
     ClickHouseModule.forRootAsync(),
     ThrottlerModule.forRoot([{ ttl: 60_000, limit: 100 }]),
     AuthModule,
+    StatsModule,
   ],
   controllers: [TestValidationController],
   providers: [

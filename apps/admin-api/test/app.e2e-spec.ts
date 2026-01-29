@@ -196,4 +196,33 @@ describe('Admin API E2E (validation contract)', () => {
     const body = res.body as { error?: { code?: string; message?: string } };
     expect(body.error?.code).toBe('INVALID_CREDENTIALS');
   });
+
+  it('GET /api/admin/stats/growth returns timeSeries with date, totalGuilds, totalUsers', async () => {
+    const loginRes = await request(app.getHttpServer())
+      .post('/api/auth/login')
+      .send({ email: 'admin@admin.com', password: 'adminpassword' })
+      .expect(200);
+    const token = (loginRes.body as { data?: { accessToken?: string } }).data?.accessToken;
+    expect(token).toBeDefined();
+
+    const res = await request(app.getHttpServer())
+      .get('/api/admin/stats/growth')
+      .query({ from: '2020-01-01', to: '2030-01-01' })
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+
+    const body = res.body as {
+      data?: { timeSeries?: Array<{ date: string; totalGuilds: number; totalUsers: number }> };
+    };
+    expect(body.data).toBeDefined();
+    expect(body.data?.timeSeries).toBeDefined();
+    expect(Array.isArray(body.data?.timeSeries)).toBe(true);
+    body.data?.timeSeries?.forEach((point) => {
+      expect(point).toHaveProperty('date');
+      expect(point).toHaveProperty('totalGuilds');
+      expect(point).toHaveProperty('totalUsers');
+      expect(typeof point.totalGuilds).toBe('number');
+      expect(typeof point.totalUsers).toBe('number');
+    });
+  });
 });

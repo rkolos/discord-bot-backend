@@ -49,7 +49,7 @@ describe('ClickHouse integration (schema)', () => {
   it('creates raw_events and materialized views', async () => {
     const db = process.env['CLICKHOUSE_DB'] ?? 'default';
     const r = await clickhouse.query({
-      query: `SELECT name FROM system.tables WHERE database = {db:String} AND name IN ('raw_events', 'mv_daily_activity', 'mv_heatmap', 'mv_role_stats', 'mv_command_stats', 'mv_top_members')`,
+      query: `SELECT name FROM system.tables WHERE database = {db:String} AND name IN ('raw_events', 'mv_daily_activity', 'mv_heatmap', 'mv_role_stats', 'mv_command_stats', 'mv_voice_stats', 'mv_top_members')`,
       query_params: { db },
     });
 
@@ -61,6 +61,7 @@ describe('ClickHouse integration (schema)', () => {
     expect(names).toContain('mv_heatmap');
     expect(names).toContain('mv_role_stats');
     expect(names).toContain('mv_command_stats');
+    expect(names).toContain('mv_voice_stats');
     expect(names).toContain('mv_top_members');
   });
 });
