@@ -130,6 +130,7 @@ export class ClickHouseService implements OnModuleInit {
         PARTITION BY toStartOfWeek(event_time)
         ORDER BY (guild_id, event_date, event_type, user_id)
         TTL retention_until
+        SETTINGS allow_nullable_key = 1
       `,
     });
 
@@ -205,6 +206,7 @@ export class ClickHouseService implements OnModuleInit {
       ENGINE = SummingMergeTree
       PARTITION BY toStartOfWeek(event_date)
       ORDER BY (guild_id, user_id)
+      SETTINGS allow_nullable_key = 1
       AS SELECT
         guild_id,
         user_id,
