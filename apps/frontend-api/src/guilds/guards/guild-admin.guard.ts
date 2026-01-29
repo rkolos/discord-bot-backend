@@ -7,6 +7,12 @@ import {
 import { GuildsService } from '../guilds.service';
 import { User } from '@app/shared';
 
+/**
+ * Защищает эндпоинты с :guildId. Проверяет права пользователя на гильдию:
+ * извлекает guildId из params, проверяет по кэшу гильдий пользователя в Redis
+ * (или по Discord API при промахе кэша). Пропускает запрос при наличии прав
+ * Administrator или Manage Guild, иначе возвращает 403.
+ */
 @Injectable()
 export class GuildAdminGuard implements CanActivate {
   constructor(private readonly guildsService: GuildsService) {}

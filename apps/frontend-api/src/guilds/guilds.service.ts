@@ -61,7 +61,8 @@ export interface GuildSettingsResponseDto {
   serverDescription: string | null;
   language: string;
   timezone: string;
-  botToken: string | null;
+  /** true, если в БД сохранён зашифрованный токен бота; реальный токен не передаётся. */
+  hasToken: boolean;
   botConnected: boolean;
   botUserId: string | null;
   lastConnected: string | null;
@@ -173,7 +174,7 @@ export class GuildsService {
   }
 
   /**
-   * Возвращает настройки гильдии и модули. botToken в ответе маскируется (******** или null).
+   * Возвращает настройки гильдии и модули. Реальный токен не передаётся; в ответе только hasToken.
    */
   async getSettings(discordGuildId: string): Promise<GuildSettingsResponseDto> {
     const guild = await this.findGuildByDiscordId(discordGuildId);
@@ -195,16 +196,14 @@ export class GuildsService {
     const modules = await this.guildModuleRepository.find({
       where: { guildId: guild.id },
     });
-    const botToken =
-      settings.botTokenEncrypted != null && settings.botTokenEncrypted.length > 0
-        ? BOT_TOKEN_MASK
-        : null;
+    const hasToken =
+      settings.botTokenEncrypted != null && settings.botTokenEncrypted.length > 0;
     return {
       serverName: settings.serverName,
       serverDescription: settings.serverDescription,
       language: settings.language,
       timezone: settings.timezone,
-      botToken,
+      hasToken,
       botConnected: settings.botConnected,
       botUserId: settings.botUserId,
       lastConnected: settings.lastConnected?.toISOString() ?? null,
@@ -224,6 +223,7 @@ export class GuildsService {
 
   /**
    * Обновляет статусы модулей гильдии. Если модуля нет — создаёт запись с дефолтами.
+   * Поддерживает формат { moduleId, enabled } (один модуль) и объект с ключами counters/analytics.
    */
   async updateModules(
     discordGuildId: string,
@@ -237,10 +237,19 @@ export class GuildsService {
       });
     }
     const updates: Array<{ moduleKey: AllowedModuleKey; enabled: boolean }> = [];
-    for (const key of ALLOWED_MODULE_KEYS) {
-      const value = (dto as Record<string, unknown>)[key];
-      if (typeof value === 'boolean') updates.push({ moduleKey: key, enabled: value });
+
+    if (dto.moduleId != null && dto.moduleId !== '') {
+      const moduleKey = dto.moduleId as AllowedModuleKey;
+      if (ALLOWED_MODULE_KEYS.includes(moduleKey)) {
+        updates.push({ moduleKey, enabled: dto.enabled ?? true });
+      }
+    } else {
+      for (const key of ALLOWED_MODULE_KEYS) {
+        const value = (dto as Record<string, unknown>)[key];
+        if (typeof value === 'boolean') updates.push({ moduleKey: key, enabled: value });
+      }
     }
+
     if (updates.length === 0) {
       const modules = await this.guildModuleRepository.find({
         where: { guildId: guild.id },
