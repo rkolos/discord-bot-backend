@@ -3,16 +3,29 @@
   "version": "0.0.1",
   "private": true,
   "scripts": {
-    "build": "nest build",
+    "build": "nest build frontend-api && nest build admin-api && nest build bot-service && nest build ingestor-worker && nest build background-worker",
+    "build:frontend-api": "nest build frontend-api",
+    "build:admin-api": "nest build admin-api",
+    "build:bot-service": "nest build bot-service",
+    "build:ingestor-worker": "nest build ingestor-worker",
+    "build:background-worker": "nest build background-worker",
     "start": "nest start",
-    "start:dev": "nest start --watch"
+    "start:dev": "nest start --watch",
+    "start:dev:frontend-api": "nest start --watch frontend-api",
+    "start:dev:admin-api": "nest start --watch admin-api",
+    "start:dev:bot-service": "nest start --watch bot-service",
+    "start:dev:ingestor-worker": "nest start --watch ingestor-worker",
+    "start:dev:background-worker": "nest start --watch background-worker"
   },
   "dependencies": {
     "@nestjs/common": "^10.0.0",
     "@nestjs/core": "^10.0.0",
     "@nestjs/platform-express": "^10.0.0",
+    "@nestjs/typeorm": "^10.0.0",
+    "pg": "^8.11.0",
     "reflect-metadata": "^0.2.0",
-    "rxjs": "^7.8.1"
+    "rxjs": "^7.8.1",
+    "typeorm": "^0.3.17"
   },
   "devDependencies": {
     "@nestjs/cli": "^10.0.0",

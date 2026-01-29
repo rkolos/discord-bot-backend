@@ -35,13 +35,13 @@
         "tsConfigPath": "apps/bot-service/tsconfig.app.json"
       }
     },
-    "ingestor": {
+    "ingestor-worker": {
       "type": "application",
-      "root": "apps/ingestor",
+      "root": "apps/ingestor-worker",
       "entryFile": "main",
-      "sourceRoot": "apps/ingestor/src",
+      "sourceRoot": "apps/ingestor-worker/src",
       "compilerOptions": {
-        "tsConfigPath": "apps/ingestor/tsconfig.app.json"
+        "tsConfigPath": "apps/ingestor-worker/tsconfig.app.json"
       }
     },
     "background-worker": {
@@ -52,6 +52,12 @@
       "compilerOptions": {
         "tsConfigPath": "apps/background-worker/tsconfig.app.json"
       }
+    },
+    "shared": {
+      "type": "library",
+      "root": "libs/shared",
+      "entryFile": "index",
+      "sourceRoot": "libs/shared/src"
     }
   }
 }
