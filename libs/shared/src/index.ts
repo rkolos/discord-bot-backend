@@ -9,6 +9,7 @@ export { AppDataSource } from './database/data-source';
 export * from './database/entities';
 export * from './filters';
 export * from './logs';
+export * from './plan-tiers';
 export * from './pipes';
 export * from './redis';
 export * from './validators';

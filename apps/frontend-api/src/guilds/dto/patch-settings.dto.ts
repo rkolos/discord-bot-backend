@@ -1,3 +1,4 @@
+import { MAX_DATA_RETENTION_DAYS } from '@app/shared';
 import {
   IsString,
   IsOptional,
@@ -31,7 +32,7 @@ export class PatchSettingsDto {
   @IsOptional()
   @IsInt()
   @Min(0)
-  @Max(365)
+  @Max(MAX_DATA_RETENTION_DAYS)
   dataRetentionDays?: number;
 
   @IsOptional()

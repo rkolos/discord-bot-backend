@@ -4,15 +4,13 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import {
-  GuildSubscriptionTier,
+  getAnalyticsMaxDaysForTier,
   SharedAnalyticsService,
   type ActivityChartPointDto,
   type AnalyticsOverviewDto,
   type TopMemberDto,
 } from '@app/shared';
 import { GuildsService } from '../guilds/guilds.service';
-
-const FREE_PLAN_MAX_DAYS = 365;
 
 export type { AnalyticsOverviewDto, ActivityChartPointDto, TopMemberDto };
 
@@ -48,7 +46,7 @@ export class AnalyticsService {
       });
     }
     this.validateDateRange(from, to);
-    this.validateFreePlanPeriod(guild.subscriptionTier, from, to);
+    this.validatePlanPeriod(guild.subscriptionTier, from, to);
     return this.sharedAnalytics.getActivityChartByGuildId(guild.id, from, to);
   }
 
@@ -84,19 +82,20 @@ export class AnalyticsService {
     }
   }
 
-  validateFreePlanPeriod(
-    subscriptionTier: GuildSubscriptionTier,
+  validatePlanPeriod(
+    subscriptionTier: string,
     from: string,
     to: string,
   ): void {
-    if (subscriptionTier !== GuildSubscriptionTier.FREE) return;
+    const maxDays = getAnalyticsMaxDaysForTier(subscriptionTier);
+    if (maxDays === null) return;
     const fromDate = new Date(from);
     const toDate = new Date(to);
     const days = Math.ceil((toDate.getTime() - fromDate.getTime()) / (1000 * 60 * 60 * 24));
-    if (days > FREE_PLAN_MAX_DAYS) {
+    if (days > maxDays) {
       throw new BadRequestException({
         code: 'INVALID_DATE_RANGE',
-        message: `Free plan allows analytics for up to ${FREE_PLAN_MAX_DAYS} days. Requested period exceeds this limit.`,
+        message: `Your plan allows analytics for up to ${maxDays} days. Requested period exceeds this limit.`,
       });
     }
   }
@@ -137,7 +136,7 @@ export class AnalyticsService {
       });
     }
     this.validateDateRange(from, to);
-    this.validateFreePlanPeriod(guild.subscriptionTier, from, to);
+    this.validatePlanPeriod(guild.subscriptionTier, from, to);
     const [timeSeries, topMembers, _overview] = await Promise.all([
       this.sharedAnalytics.getActivityChartByGuildId(guild.id, from, to),
       this.sharedAnalytics.getTopMembersByGuildId(guild.id, 'messages', 20),

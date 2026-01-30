@@ -18,14 +18,14 @@ describe('computeRetentionUntil', () => {
     expect(r.toISOString()).toBe('2026-01-15T12:00:00.000Z');
   });
 
-  it('pro: event_time + 365 days', () => {
+  it('pro: fallback to free → event_time + 30 days', () => {
     const r = computeRetentionUntil(base, 'pro');
-    expect(r.toISOString()).toBe('2026-01-15T12:00:00.000Z');
+    expect(r.toISOString()).toBe('2025-02-14T12:00:00.000Z');
   });
 
-  it('enterprise: event_time + 365 days', () => {
+  it('enterprise: fallback to free → event_time + 30 days', () => {
     const r = computeRetentionUntil(base, 'enterprise');
-    expect(r.toISOString()).toBe('2026-01-15T12:00:00.000Z');
+    expect(r.toISOString()).toBe('2025-02-14T12:00:00.000Z');
   });
 
   it('accepts ISO string eventTime', () => {
@@ -37,7 +37,7 @@ describe('computeRetentionUntil', () => {
     expect(computeRetentionUntil(base, 'FREE').toISOString()).toBe(
       '2025-02-14T12:00:00.000Z',
     );
-    expect(computeRetentionUntil(base, 'Pro').toISOString()).toBe(
+    expect(computeRetentionUntil(base, 'Premium').toISOString()).toBe(
       '2026-01-15T12:00:00.000Z',
     );
   });
