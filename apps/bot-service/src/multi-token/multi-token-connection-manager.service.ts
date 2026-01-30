@@ -17,6 +17,8 @@ export class MultiTokenConnectionManagerService
   private readonly logger = new Logger(MultiTokenConnectionManagerService.name);
   /** guildId (UUID) -> Discord Client */
   private readonly customClients = new Map<string, Client>();
+  /** guildId (UUID) -> discordGuildId, для кастомных гильдий (reconciliation). */
+  private readonly customGuildDiscordIds = new Map<string, string>();
   private interactionHandler: ReturnType<typeof createInteractionHandler> | null = null;
 
   constructor(
@@ -188,6 +190,9 @@ export class MultiTokenConnectionManagerService
       try {
         await client.login(token);
         this.customClients.set(guildIdUuid, client);
+        if (discordGuildId) {
+          this.customGuildDiscordIds.set(guildIdUuid, discordGuildId);
+        }
       } catch (err) {
         this.logger.warn(
           `Failed to login custom token for guild ${guildIdUuid}: ${(err as Error).message}`,
@@ -209,7 +214,25 @@ export class MultiTokenConnectionManagerService
     );
     await Promise.all(destroyPromises);
     this.customClients.clear();
+    this.customGuildDiscordIds.clear();
     this.logger.log('Multi-token: all custom clients destroyed');
+  }
+
+  /**
+   * Список кастомных гильдий для reconciliation: guildId (UUID) → discordGuildId.
+   */
+  getCustomGuildIds(): Map<string, string> {
+    return new Map(this.customGuildDiscordIds);
+  }
+
+  /**
+   * Проверяет, что гильдия с кастомным токеном присутствует в кэше клиента (бот в гильдии).
+   */
+  isGuildInCache(guildIdUuid: string): boolean {
+    const client = this.customClients.get(guildIdUuid);
+    const discordGuildId = this.customGuildDiscordIds.get(guildIdUuid);
+    if (!client || !discordGuildId) return false;
+    return client.guilds.cache.has(discordGuildId);
   }
 
   /**

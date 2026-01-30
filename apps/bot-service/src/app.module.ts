@@ -8,6 +8,7 @@ import { ConfigModule } from '@nestjs/config';
 import { CommandsModule } from './commands/commands.module';
 import { CountersConsumerModule } from './counters-consumer/counters-consumer.module';
 import { CountersQueueProducerModule } from './counters-queue-producer/counters-queue-producer.module';
+import { GuildReconciliationModule } from './guild-sync/guild-reconciliation.module';
 import { GuildSyncModule } from './guild-sync/guild-sync.module';
 import { LogsConsumerModule } from './logs-consumer/logs-consumer.module';
 import { HealthModule } from './health/health.module';
@@ -23,6 +24,7 @@ import { ShardingModule } from './sharding/sharding.module';
     DatabaseModule,
     RedisModule.forRootAsync(),
     GuildSyncModule,
+    GuildReconciliationModule,
     ShardingModule,
     MultiTokenModule,
     CommandsModule,
