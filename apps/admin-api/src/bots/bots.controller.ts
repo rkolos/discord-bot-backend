@@ -11,7 +11,10 @@ export class BotsController {
   @Post('commands/register')
   async registerCommands(@Body() dto: RegisterCommandsDto): Promise<{ ok: boolean }> {
     if (dto.scope === 'guild' && !dto.guildId) {
-      throw new BadRequestException('guildId is required when scope is guild');
+      throw new BadRequestException({
+        code: 'VALIDATION_ERROR',
+        message: 'guildId is required when scope is guild',
+      });
     }
     await this.botsService.registerCommands(dto);
     return { ok: true };

@@ -54,11 +54,9 @@ export class AuthService {
     if (existing) {
       throw new HttpException(
         {
-          error: {
-            code: 'VALIDATION_ERROR',
-            message: 'Validation failed',
-            details: { email: 'Email already exists' },
-          },
+          code: 'VALIDATION_ERROR',
+          message: 'Validation failed',
+          details: { email: 'Email already exists' },
         },
         HttpStatus.UNPROCESSABLE_ENTITY,
       );
@@ -150,11 +148,8 @@ export class AuthService {
     if (!user) {
       throw new HttpException(
         {
-          error: {
-            code: 'INTERNAL_ERROR',
-            message: 'User upsert failed',
-            details: {},
-          },
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'User upsert failed',
         },
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
@@ -198,21 +193,33 @@ export class AuthService {
       where: { tokenHash },
     });
     if (!record) {
-      throw new UnauthorizedException('Invalid or expired refresh token');
+      throw new UnauthorizedException({
+        code: 'TOKEN_INVALID',
+        message: 'Invalid or expired refresh token',
+      });
     }
     if (record.revokedAt) {
       await this.revokeAllRefreshTokensForUser(record.userId);
-      throw new UnauthorizedException('Refresh token reuse detected');
+      throw new UnauthorizedException({
+        code: 'TOKEN_INVALID',
+        message: 'Refresh token reuse detected',
+      });
     }
     const now = new Date();
     if (record.expiresAt <= now) {
-      throw new UnauthorizedException('Invalid or expired refresh token');
+      throw new UnauthorizedException({
+        code: 'TOKEN_EXPIRED',
+        message: 'Invalid or expired refresh token',
+      });
     }
     const user = await this.userRepository.findOne({
       where: { id: record.userId },
     });
     if (!user || user.status !== UserStatus.ACTIVE) {
-      throw new UnauthorizedException('Invalid or expired refresh token');
+      throw new UnauthorizedException({
+        code: 'TOKEN_INVALID',
+        message: 'Invalid or expired refresh token',
+      });
     }
     record.revokedAt = now;
     await this.refreshTokenRepository.save(record);

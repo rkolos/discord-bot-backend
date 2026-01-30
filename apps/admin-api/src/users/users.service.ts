@@ -200,7 +200,7 @@ export class UsersService {
     }
     if (user.status === UserStatus.BANNED) {
       throw new BadRequestException({
-        code: 'BAD_REQUEST',
+        code: 'USER_ALREADY_BANNED',
         message: 'User already banned',
       });
     }
@@ -221,7 +221,7 @@ export class UsersService {
     }
     if (user.status !== UserStatus.BANNED) {
       throw new BadRequestException({
-        code: 'BAD_REQUEST',
+        code: 'USER_NOT_BANNED',
         message: 'User is not banned',
       });
     }

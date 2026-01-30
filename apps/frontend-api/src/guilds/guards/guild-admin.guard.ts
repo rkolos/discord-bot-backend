@@ -3,15 +3,14 @@ import {
   ExecutionContext,
   ForbiddenException,
   Injectable,
+  NotFoundException,
 } from '@nestjs/common';
 import { GuildsService } from '../guilds.service';
 import { User } from '@app/shared';
 
 /**
- * Защищает эндпоинты с :guildId. Проверяет права пользователя на гильдию:
- * извлекает guildId из params, проверяет по кэшу гильдий пользователя в Redis
- * (или по Discord API при промахе кэша). Пропускает запрос при наличии прав
- * Administrator или Manage Guild, иначе возвращает 403.
+ * Защищает эндпоинты с :guildId. Сначала проверяет наличие гильдии в БД (404 при отсутствии),
+ * затем права пользователя на гильдию по кэшу/Discord API (403 при отсутствии прав Administrator или Manage Guild).
  */
 @Injectable()
 export class GuildAdminGuard implements CanActivate {
@@ -28,6 +27,13 @@ export class GuildAdminGuard implements CanActivate {
       throw new ForbiddenException({
         code: 'FORBIDDEN',
         message: 'Access denied to this guild',
+      });
+    }
+    const guild = await this.guildsService.findGuildByDiscordId(guildId);
+    if (!guild) {
+      throw new NotFoundException({
+        code: 'GUILD_NOT_FOUND',
+        message: 'Guild not found',
       });
     }
     const hasAccess = await this.guildsService.userHasGuildAdmin(user.id, guildId);

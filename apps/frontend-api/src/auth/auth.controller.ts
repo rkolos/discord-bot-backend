@@ -66,10 +66,8 @@ export class AuthController {
     if (!code || !state) {
       throw new HttpException(
         {
-          error: {
-            code: 'OAUTH_FAILED',
-            message: 'Discord OAuth authentication failed',
-          },
+          code: 'OAUTH_FAILED',
+          message: 'Discord OAuth authentication failed',
         },
         HttpStatus.UNAUTHORIZED,
       );
@@ -79,10 +77,8 @@ export class AuthController {
     if (!stateData) {
       throw new HttpException(
         {
-          error: {
-            code: 'OAUTH_FAILED',
-            message: 'Discord OAuth authentication failed',
-          },
+          code: 'OAUTH_FAILED',
+          message: 'Discord OAuth authentication failed',
         },
         HttpStatus.UNAUTHORIZED,
       );
@@ -123,10 +119,8 @@ export class AuthController {
     } catch {
       throw new HttpException(
         {
-          error: {
-            code: 'OAUTH_FAILED',
-            message: 'Discord OAuth authentication failed',
-          },
+          code: 'OAUTH_FAILED',
+          message: 'Discord OAuth authentication failed',
         },
         HttpStatus.UNAUTHORIZED,
       );
@@ -238,7 +232,10 @@ export class AuthController {
   }> {
     const valid = await this.discordOAuth.validateState(dto.state);
     if (!valid) {
-      throw new ForbiddenException('Invalid or expired state');
+      throw new ForbiddenException({
+        code: 'OAUTH_FAILED',
+        message: 'Invalid or expired state',
+      });
     }
     const redirectUri = this.sharedConfig.discord.oauthRedirectUri;
     const tokenResponse = await this.discordOAuth.exchangeCodeForToken(
@@ -287,7 +284,10 @@ export class AuthController {
   ): Promise<{ data: { accessToken: string } }> {
     const refreshTokenValue = req.cookies?.[REFRESH_TOKEN_COOKIE_NAME];
     if (!refreshTokenValue) {
-      throw new UnauthorizedException('Missing refresh token');
+      throw new UnauthorizedException({
+        code: 'TOKEN_INVALID',
+        message: 'Missing refresh token',
+      });
     }
     const { accessToken, refreshToken, expiresAt } =
       await this.authService.refresh(refreshTokenValue);

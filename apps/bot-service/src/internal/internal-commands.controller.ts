@@ -11,7 +11,10 @@ export class InternalCommandsController {
   @Post('register')
   async register(@Body() dto: RegisterCommandsDto): Promise<{ ok: boolean }> {
     if (dto.scope === 'guild' && !dto.guildId) {
-      throw new BadRequestException('guildId is required when scope is guild');
+      throw new BadRequestException({
+        code: 'VALIDATION_ERROR',
+        message: 'guildId is required when scope is guild',
+      });
     }
     if (dto.scope === 'global') {
       await this.commandRegistration.registerGlobalCommands(dto.token);

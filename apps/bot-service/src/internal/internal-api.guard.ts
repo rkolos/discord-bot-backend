@@ -19,7 +19,10 @@ export class InternalApiGuard implements CanActivate {
     }
     const header = request.headers['x-internal-secret'];
     if (header !== secret) {
-      throw new UnauthorizedException('Invalid or missing X-Internal-Secret');
+      throw new UnauthorizedException({
+        code: 'UNAUTHORIZED',
+        message: 'Invalid or missing X-Internal-Secret',
+      });
     }
     return true;
   }

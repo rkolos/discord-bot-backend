@@ -258,8 +258,11 @@ describe('Frontend API E2E (counters)', () => {
     );
     seededGuild = guild;
 
-    (mockGuildsService.findGuildByDiscordId as (id: string) => Promise<Guild | null>) = async (discordGuildId: string) =>
-      discordGuildId === seededGuild.discordGuildId ? seededGuild : null;
+    (mockGuildsService.findGuildByDiscordId as (id: string) => Promise<Guild | null>) = async (discordGuildId: string) => {
+      if (discordGuildId === seededGuild.discordGuildId) return seededGuild;
+      if (discordGuildId === '999888777666555444') return { ...seededGuild, discordGuildId: '999888777666555444' } as Guild;
+      return null;
+    };
     (mockGuildsService.userHasGuildAdmin as (userId: string, discordGuildId: string) => Promise<boolean>) = async (userId: string, discordGuildId: string) =>
       userId === seededUser.id && discordGuildId === seededGuild.discordGuildId;
     (mockJwtAuthGuard.canActivate as (context: ExecutionContext) => boolean) = (context: ExecutionContext) => {
@@ -335,6 +338,19 @@ describe('Frontend API E2E (counters)', () => {
     expect(body.error?.message).toBeDefined();
   });
 
+  it('GET /api/guilds/:guildId/settings returns 404 GUILD_NOT_FOUND when guild does not exist', async () => {
+    const unknownGuildId = '111222333444555000';
+    const res = await request(app.getHttpServer())
+      .get(`/api/guilds/${unknownGuildId}/settings`)
+      .set('Authorization', 'Bearer e2e-test-token')
+      .expect(404);
+
+    const body = res.body as { error?: { code?: string; message?: string } };
+    expect(body.error).toBeDefined();
+    expect(body.error?.code).toBe('GUILD_NOT_FOUND');
+    expect(body.error?.message).toBeDefined();
+  });
+
   it('PATCH /api/guilds/:guildId/logs/settings returns 400 VALIDATION_ERROR when channelId is invalid', async () => {
     const res = await request(app.getHttpServer())
       .patch(`/api/guilds/${seededGuild.discordGuildId}/logs/settings`)
@@ -405,6 +421,22 @@ describe('Frontend API E2E (analytics)', () => {
     const mockGuildsService: Partial<GuildsService> = {
       findGuildByDiscordId: async () => null,
       userHasGuildAdmin: async () => false,
+      getSettings: async () =>
+        ({
+          serverName: '',
+          serverDescription: null,
+          language: '',
+          timezone: 'UTC',
+          hasToken: false,
+          botConnected: false,
+          botUserId: null,
+          lastConnected: null,
+          dataRetentionDays: 30,
+          anonymizeUserData: false,
+          shareAnalytics: false,
+          allowPublicWidgets: false,
+          modules: [],
+        }) as Awaited<ReturnType<GuildsService['getSettings']>>,
     };
 
     const mockJwtAuthGuard = {
