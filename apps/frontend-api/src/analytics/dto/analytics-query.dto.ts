@@ -1,4 +1,5 @@
-import { IsDateString } from 'class-validator';
+import { IsDateString, IsOptional } from 'class-validator';
+import { IsTimezone } from '@app/shared';
 
 export class AnalyticsQueryDto {
   @IsDateString()
@@ -6,4 +7,8 @@ export class AnalyticsQueryDto {
 
   @IsDateString()
   to!: string;
+
+  @IsOptional()
+  @IsTimezone()
+  timezone?: string;
 }

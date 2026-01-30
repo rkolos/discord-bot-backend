@@ -85,6 +85,7 @@ describe('Logs integration (PostgreSQL)', () => {
       providers: [
         LogsService,
         { provide: getRepositoryToken(GuildLogSetting), useValue: logSettingsRepo },
+        { provide: DataSource, useValue: ds },
         { provide: GuildsService, useValue: mockGuildsService },
         { provide: LogsQueueService, useValue: mockQueueService },
       ],

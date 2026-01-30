@@ -44,7 +44,8 @@ GET /api/guilds?page=1&limit=20&search=awesome&minMembers=1000&sortBy=memberCoun
     "total": 850,
     "page": 1,
     "limit": 20,
-    "totalPages": 43
+    "totalPages": 43,
+    "hasNextPage": true
   }
 }
 ```

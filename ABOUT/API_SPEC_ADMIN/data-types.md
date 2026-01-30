@@ -125,6 +125,7 @@ interface PaginationMeta {
   page: number;
   limit: number;
   totalPages: number;
+  hasNextPage: boolean;  // true when page < totalPages
 }
 ```
 

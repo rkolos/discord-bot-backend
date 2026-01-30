@@ -44,7 +44,8 @@ GET /api/users?page=1&limit=20&search=john&status=active&plan=pro&sortBy=lastLog
     "total": 1250,
     "page": 1,
     "limit": 20,
-    "totalPages": 63
+    "totalPages": 63,
+    "hasNextPage": true
   }
 }
 ```

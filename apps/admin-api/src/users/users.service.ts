@@ -54,7 +54,7 @@ export class UsersService {
       lastLoginAt: string | null;
       ownedGuildsCount: number;
     }>;
-    meta: { total: number; page: number; limit: number; totalPages: number };
+    meta: { total: number; page: number; limit: number; totalPages: number; hasNextPage: boolean };
   }> {
     const qb = this.userRepository.createQueryBuilder('u');
     if (search && search.trim()) {
@@ -96,9 +96,10 @@ export class UsersService {
       ownedGuildsCount: guildCounts[i] ?? 0,
     }));
     const totalPages = Math.ceil(total / take) || 1;
+    const currentPage = Math.max(1, page);
     return {
       data,
-      meta: { total, page: Math.max(1, page), limit: take, totalPages },
+      meta: { total, page: currentPage, limit: take, totalPages, hasNextPage: currentPage < totalPages },
     };
   }
 

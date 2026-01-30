@@ -1,4 +1,5 @@
 import { IsIn, IsOptional, IsString, MinLength } from 'class-validator';
+import { IsSnowflake } from '@app/shared';
 
 export class RegisterCommandsDto {
   @IsString()
@@ -9,7 +10,6 @@ export class RegisterCommandsDto {
   scope: 'global' | 'guild';
 
   @IsOptional()
-  @IsString()
-  @MinLength(1)
+  @IsSnowflake()
   guildId?: string;
 }

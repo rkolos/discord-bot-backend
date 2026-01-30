@@ -1,10 +1,11 @@
-import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Headers, Param, Query, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { GuildAdminGuard } from '../guilds/guards/guild-admin.guard';
 import { GuildIdParamDto } from '../guilds/dto/guild-id-param.dto';
 import { AnalyticsService } from './analytics.service';
 import {
   ActivityChartQueryDto,
+  OverviewQueryDto,
   TopMembersQueryDto,
   AnalyticsQueryDto,
 } from './dto';
@@ -18,6 +19,7 @@ export class AnalyticsController {
   async getCombinedAnalytics(
     @Param() params: GuildIdParamDto,
     @Query() query: AnalyticsQueryDto,
+    @Headers('x-timezone') xTimezone?: string,
   ): Promise<{
     data: {
       timeSeries: Array<{
@@ -65,6 +67,7 @@ export class AnalyticsController {
       params.guildId,
       query.from,
       query.to,
+      { headerTimezone: xTimezone, queryTimezone: query.timezone },
     );
     return { data };
   }
@@ -72,6 +75,8 @@ export class AnalyticsController {
   @Get('overview')
   async getOverview(
     @Param() params: GuildIdParamDto,
+    @Query() query: OverviewQueryDto,
+    @Headers('x-timezone') xTimezone?: string,
   ): Promise<{
     data: {
       totalMessages: number;
@@ -79,7 +84,10 @@ export class AnalyticsController {
       activeMembers7d: number;
     };
   }> {
-    const data = await this.analyticsService.getOverview(params.guildId);
+    const data = await this.analyticsService.getOverview(params.guildId, {
+      headerTimezone: xTimezone,
+      queryTimezone: query.timezone,
+    });
     return { data };
   }
 
@@ -87,6 +95,7 @@ export class AnalyticsController {
   async getActivityChart(
     @Param() params: GuildIdParamDto,
     @Query() query: ActivityChartQueryDto,
+    @Headers('x-timezone') xTimezone?: string,
   ): Promise<{
     data: Array<{
       date: string;
@@ -100,6 +109,7 @@ export class AnalyticsController {
       query.from,
       query.to,
       query.period,
+      { headerTimezone: xTimezone, queryTimezone: query.timezone },
     );
     return { data };
   }

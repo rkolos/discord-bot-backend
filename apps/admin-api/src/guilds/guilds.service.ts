@@ -40,7 +40,7 @@ export class GuildsService {
       joinedAt: string;
       historySyncStatus: string;
     }>;
-    meta: { total: number; page: number; limit: number; totalPages: number };
+    meta: { total: number; page: number; limit: number; totalPages: number; hasNextPage: boolean };
   }> {
     const qb = this.guildRepository.createQueryBuilder('g');
     if (search && search.trim()) {
@@ -83,9 +83,10 @@ export class GuildsService {
       }),
     );
     const totalPages = Math.ceil(total / take) || 1;
+    const currentPage = Math.max(1, page);
     return {
       data,
-      meta: { total, page: Math.max(1, page), limit: take, totalPages },
+      meta: { total, page: currentPage, limit: take, totalPages, hasNextPage: currentPage < totalPages },
     };
   }
 

@@ -8,7 +8,7 @@ import { AnalyticsService } from './analytics.service';
 describe('AnalyticsService', () => {
   let service: AnalyticsService;
   let sharedAnalytics: jest.Mocked<Pick<SharedAnalyticsService, 'getOverviewByGuildId' | 'getActivityChartByGuildId' | 'getTopMembersByGuildId'>>;
-  let guildsService: jest.Mocked<Pick<GuildsService, 'findGuildByDiscordId'>>;
+  let guildsService: jest.Mocked<Pick<GuildsService, 'findGuildByDiscordId' | 'getSettings'>>;
 
   const guildId = 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11';
   const discordGuildId = '111222333444555666';
@@ -21,6 +21,7 @@ describe('AnalyticsService', () => {
     };
     const mockGuildsService = {
       findGuildByDiscordId: jest.fn(),
+      getSettings: jest.fn().mockResolvedValue({ timezone: 'UTC' }),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -55,6 +56,7 @@ describe('AnalyticsService', () => {
         guildId,
         from,
         to,
+        'UTC',
       );
     });
 
@@ -74,10 +76,13 @@ describe('AnalyticsService', () => {
       );
     });
 
-    it('getOverview calls sharedAnalytics with guild id', async () => {
+    it('getOverview calls sharedAnalytics with guild id and timezone from settings', async () => {
       (guildsService.findGuildByDiscordId as jest.Mock).mockResolvedValue({
         id: guildId,
         discordGuildId,
+      });
+      (guildsService.getSettings as jest.Mock).mockResolvedValue({
+        timezone: 'UTC',
       });
       (sharedAnalytics.getOverviewByGuildId as jest.Mock).mockResolvedValue({
         totalMessages: 100,
@@ -87,12 +92,38 @@ describe('AnalyticsService', () => {
 
       const result = await service.getOverview(discordGuildId);
 
-      expect(sharedAnalytics.getOverviewByGuildId).toHaveBeenCalledWith(guildId);
+      expect(sharedAnalytics.getOverviewByGuildId).toHaveBeenCalledWith(
+        guildId,
+        'UTC',
+      );
       expect(result).toEqual({
         totalMessages: 100,
         activeMembers24h: 5,
         activeMembers7d: 12,
       });
+    });
+
+    it('getOverview uses header timezone over query and settings', async () => {
+      (guildsService.findGuildByDiscordId as jest.Mock).mockResolvedValue({
+        id: guildId,
+        discordGuildId,
+      });
+      (sharedAnalytics.getOverviewByGuildId as jest.Mock).mockResolvedValue({
+        totalMessages: 0,
+        activeMembers24h: 0,
+        activeMembers7d: 0,
+      });
+
+      await service.getOverview(discordGuildId, {
+        headerTimezone: 'Europe/Moscow',
+        queryTimezone: 'America/New_York',
+      });
+
+      expect(sharedAnalytics.getOverviewByGuildId).toHaveBeenCalledWith(
+        guildId,
+        'Europe/Moscow',
+      );
+      expect(guildsService.getSettings).not.toHaveBeenCalled();
     });
   });
 
@@ -134,6 +165,7 @@ describe('AnalyticsService', () => {
         guildId,
         '2024-01-01',
         '2024-12-31',
+        'UTC',
       );
     });
   });

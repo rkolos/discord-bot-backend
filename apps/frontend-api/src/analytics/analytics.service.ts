@@ -14,6 +14,11 @@ import { GuildsService } from '../guilds/guilds.service';
 
 export type { AnalyticsOverviewDto, ActivityChartPointDto, TopMemberDto };
 
+export interface AnalyticsTimezoneOptions {
+  headerTimezone?: string;
+  queryTimezone?: string;
+}
+
 @Injectable()
 export class AnalyticsService {
   constructor(
@@ -21,7 +26,22 @@ export class AnalyticsService {
     private readonly guildsService: GuildsService,
   ) {}
 
-  async getOverview(discordGuildId: string): Promise<AnalyticsOverviewDto> {
+  private async resolveTimezone(
+    discordGuildId: string,
+    options?: AnalyticsTimezoneOptions,
+  ): Promise<string> {
+    const tz = options?.headerTimezone ?? options?.queryTimezone;
+    if (tz != null && String(tz).trim() !== '') {
+      return tz;
+    }
+    const settings = await this.guildsService.getSettings(discordGuildId);
+    return settings.timezone ?? 'UTC';
+  }
+
+  async getOverview(
+    discordGuildId: string,
+    timezoneOptions?: AnalyticsTimezoneOptions,
+  ): Promise<AnalyticsOverviewDto> {
     const guild = await this.guildsService.findGuildByDiscordId(discordGuildId);
     if (!guild) {
       throw new NotFoundException({
@@ -29,7 +49,8 @@ export class AnalyticsService {
         message: 'Guild not found or access denied',
       });
     }
-    return this.sharedAnalytics.getOverviewByGuildId(guild.id);
+    const timezone = await this.resolveTimezone(discordGuildId, timezoneOptions);
+    return this.sharedAnalytics.getOverviewByGuildId(guild.id, timezone);
   }
 
   async getActivityChart(
@@ -37,6 +58,7 @@ export class AnalyticsService {
     from: string,
     to: string,
     _period?: 'day' | 'week' | 'month',
+    timezoneOptions?: AnalyticsTimezoneOptions,
   ): Promise<ActivityChartPointDto[]> {
     const guild = await this.guildsService.findGuildByDiscordId(discordGuildId);
     if (!guild) {
@@ -47,7 +69,13 @@ export class AnalyticsService {
     }
     this.validateDateRange(from, to);
     this.validatePlanPeriod(guild.subscriptionTier, from, to);
-    return this.sharedAnalytics.getActivityChartByGuildId(guild.id, from, to);
+    const timezone = await this.resolveTimezone(discordGuildId, timezoneOptions);
+    return this.sharedAnalytics.getActivityChartByGuildId(
+      guild.id,
+      from,
+      to,
+      timezone,
+    );
   }
 
   async getTopMembers(
@@ -104,6 +132,7 @@ export class AnalyticsService {
     discordGuildId: string,
     from: string,
     to: string,
+    timezoneOptions?: AnalyticsTimezoneOptions,
   ): Promise<{
     timeSeries: ActivityChartPointDto[];
     heatmap: Array<{ dayOfWeek: number; hour: number; value: number }>;
@@ -137,10 +166,16 @@ export class AnalyticsService {
     }
     this.validateDateRange(from, to);
     this.validatePlanPeriod(guild.subscriptionTier, from, to);
+    const timezone = await this.resolveTimezone(discordGuildId, timezoneOptions);
     const [timeSeries, topMembers, _overview] = await Promise.all([
-      this.sharedAnalytics.getActivityChartByGuildId(guild.id, from, to),
+      this.sharedAnalytics.getActivityChartByGuildId(
+        guild.id,
+        from,
+        to,
+        timezone,
+      ),
       this.sharedAnalytics.getTopMembersByGuildId(guild.id, 'messages', 20),
-      this.sharedAnalytics.getOverviewByGuildId(guild.id),
+      this.sharedAnalytics.getOverviewByGuildId(guild.id, timezone),
     ]);
     const heatmap = await this.getHeatmap(discordGuildId);
     const totalMessages = timeSeries.reduce((acc, p) => acc + p.messages, 0);

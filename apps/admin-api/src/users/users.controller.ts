@@ -37,7 +37,7 @@ export class UsersController {
       lastLoginAt: string | null;
       ownedGuildsCount: number;
     }>;
-    meta: { total: number; page: number; limit: number; totalPages: number };
+    meta: { total: number; page: number; limit: number; totalPages: number; hasNextPage: boolean };
   }> {
     return this.usersService.getUsers(
       query.page ?? 1,

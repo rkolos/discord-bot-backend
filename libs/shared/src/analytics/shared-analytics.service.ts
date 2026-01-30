@@ -18,12 +18,24 @@ export class SharedAnalyticsService {
     return this.sharedConfig.clickhouse.database || 'default';
   }
 
-  async getOverviewByGuildId(guildId: string): Promise<AnalyticsOverviewDto> {
+  async getOverviewByGuildId(
+    guildId: string,
+    timezone?: string,
+  ): Promise<AnalyticsOverviewDto> {
     const db = this.getDatabase();
 
+    const todayQuery =
+      timezone != null && timezone.trim() !== ''
+        ? `SELECT toDate(toTimeZone(now(), {tz:String})) AS today`
+        : `SELECT toDate(now()) AS today`;
+    const todayParams =
+      timezone != null && timezone.trim() !== ''
+        ? { tz: timezone }
+        : {};
+
     const nowResult = await this.clickhouse.query({
-      query: `SELECT toDate(now()) AS today`,
-      query_params: {},
+      query: todayQuery,
+      query_params: todayParams,
     });
     const nowJson = (await nowResult.json()) as
       | { today: string }[]
@@ -91,6 +103,7 @@ export class SharedAnalyticsService {
     guildId: string,
     from: string,
     to: string,
+    _timezone?: string,
   ): Promise<ActivityChartPointDto[]> {
     const db = this.getDatabase();
 

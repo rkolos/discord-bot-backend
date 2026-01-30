@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import { GuildLogSetting } from '@app/shared';
 import { GuildsService } from '../guilds/guilds.service';
 import { LogsQueueService } from './logs-queue.service';
@@ -29,6 +29,7 @@ export class LogsService {
   constructor(
     @InjectRepository(GuildLogSetting)
     private readonly logSettingsRepository: Repository<GuildLogSetting>,
+    private readonly dataSource: DataSource,
     private readonly guildsService: GuildsService,
     private readonly logsQueueService: LogsQueueService,
   ) {}
@@ -68,40 +69,63 @@ export class LogsService {
         message: 'Guild not found or access denied',
       });
     }
-    let anyChanged = false;
-    for (const item of dto.settings) {
-      const existing = await this.logSettingsRepository.findOne({
-        where: { guildId: guild.id, eventType: item.eventType },
-      });
-      const channelId = item.channelId !== undefined ? (item.channelId ?? null) : (existing?.channelId ?? null);
-      const enabled = item.enabled !== undefined ? item.enabled : (existing?.enabled ?? true);
-      if (existing) {
-        const channelChanged = existing.channelId !== channelId;
-        const enabledChanged = existing.enabled !== enabled;
-        if (channelChanged || enabledChanged) {
+
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+    try {
+      const repo = queryRunner.manager.getRepository(GuildLogSetting);
+      const existingRows = await repo.find({ where: { guildId: guild.id } });
+      const byType = new Map(existingRows.map((r) => [r.eventType, r]));
+
+      let anyChanged = false;
+      const toSave: GuildLogSetting[] = [];
+
+      for (const item of dto.settings) {
+        const existing = byType.get(item.eventType);
+        const channelId = item.channelId !== undefined ? (item.channelId ?? null) : (existing?.channelId ?? null);
+        const enabled = item.enabled !== undefined ? item.enabled : (existing?.enabled ?? true);
+
+        if (existing) {
+          const channelChanged = existing.channelId !== channelId;
+          const enabledChanged = existing.enabled !== enabled;
+          if (channelChanged || enabledChanged) {
+            anyChanged = true;
+          }
+          existing.channelId = channelId;
+          existing.enabled = enabled;
+          toSave.push(existing);
+        } else {
           anyChanged = true;
+          toSave.push(
+            repo.create({
+              guildId: guild.id,
+              eventType: item.eventType as LogEventType,
+              channelId,
+              enabled,
+            }),
+          );
         }
-        existing.channelId = channelId;
-        existing.enabled = enabled;
-        await this.logSettingsRepository.save(existing);
-      } else {
-        anyChanged = true;
-        const created = this.logSettingsRepository.create({
-          guildId: guild.id,
-          eventType: item.eventType as LogEventType,
-          channelId,
-          enabled,
-        });
-        await this.logSettingsRepository.save(created);
       }
+
+      if (toSave.length > 0) {
+        await repo.save(toSave);
+      }
+
+      await queryRunner.commitTransaction();
+      if (anyChanged) {
+        await this.logsQueueService.addLogsConfigUpdate({
+          guild_id: guild.id,
+          discord_guild_id: discordGuildId,
+        }).catch(() => {});
+      }
+      return this.getSettings(discordGuildId);
+    } catch (err) {
+      await queryRunner.rollbackTransaction();
+      throw err;
+    } finally {
+      await queryRunner.release();
     }
-    if (anyChanged) {
-      await this.logsQueueService.addLogsConfigUpdate({
-        guild_id: guild.id,
-        discord_guild_id: discordGuildId,
-      }).catch(() => {});
-    }
-    return this.getSettings(discordGuildId);
   }
 
   getEvents(): LogEventResponseDto[] {

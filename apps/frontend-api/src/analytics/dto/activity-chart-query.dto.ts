@@ -1,4 +1,5 @@
 import { IsDateString, IsOptional, IsIn } from 'class-validator';
+import { IsTimezone } from '@app/shared';
 
 export class ActivityChartQueryDto {
   @IsDateString()
@@ -10,4 +11,8 @@ export class ActivityChartQueryDto {
   @IsOptional()
   @IsIn(['day', 'week', 'month'])
   period?: 'day' | 'week' | 'month';
+
+  @IsOptional()
+  @IsTimezone()
+  timezone?: string;
 }

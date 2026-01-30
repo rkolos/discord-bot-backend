@@ -1,10 +1,13 @@
 import {
+  ConflictException,
+  HttpException,
   Injectable,
   NotFoundException,
-  HttpException,
-  OnModuleInit,
   OnModuleDestroy,
+  OnModuleInit,
+  ServiceUnavailableException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Queue } from 'bullmq';
@@ -28,6 +31,7 @@ export class SystemService implements OnModuleInit, OnModuleDestroy {
   constructor(
     private readonly redis: RedisService,
     private readonly sharedConfig: SharedConfigService,
+    private readonly configService: ConfigService,
     @InjectRepository(Guild)
     private readonly guildRepository: Repository<Guild>,
     @InjectRepository(Counter)
@@ -172,13 +176,46 @@ export class SystemService implements OnModuleInit, OnModuleDestroy {
         message: `Guild with id '${id}' not found`,
       });
     }
-    throw new HttpException(
-      {
-        code: 'NOT_IMPLEMENTED',
-        message: 'Manual guild sync requires bot-service integration',
-      },
-      501,
-    );
+
+    const baseUrl = this.configService.get<string>('BOT_SERVICE_INTERNAL_BASE_URL');
+    if (!baseUrl || typeof baseUrl !== 'string') {
+      throw new ServiceUnavailableException({
+        code: 'DISCORD_UNAVAILABLE',
+        message: 'Discord API or sync service unavailable',
+      });
+    }
+    const url = `${baseUrl.replace(/\/$/, '')}/internal/guilds/${id}/sync`;
+    const secret = this.configService.get<string>('INTERNAL_API_SECRET');
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      ...(secret && { 'X-Internal-Secret': secret }),
+    };
+    const res = await fetch(url, { method: 'POST', headers });
+
+    if (res.ok) {
+      const json = (await res.json()) as { data?: { success: boolean; syncedAt: string } };
+      return json.data ?? { success: true, syncedAt: new Date().toISOString() };
+    }
+
+    let body: { code?: string; message?: string } = {};
+    try {
+      body = (await res.json()) as { code?: string; message?: string };
+    } catch {
+      // ignore
+    }
+    const code = body.code ?? 'INTERNAL_ERROR';
+    const message = body.message ?? `Bot-service returned ${res.status}`;
+
+    if (res.status === 404) {
+      throw new NotFoundException({ code, message });
+    }
+    if (res.status === 409) {
+      throw new ConflictException({ code, message });
+    }
+    if (res.status === 503) {
+      throw new ServiceUnavailableException({ code, message });
+    }
+    throw new HttpException({ code, message }, res.status);
   }
 
   async getQueues(): Promise<

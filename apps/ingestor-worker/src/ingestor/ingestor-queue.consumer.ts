@@ -5,6 +5,7 @@ import { validate } from 'class-validator';
 import { SharedConfigService } from '@app/shared';
 import type { RawEvent } from './ingestor.types';
 import { RawEventDto } from './dto/raw-event.dto';
+import { validatePayloadByEventType } from './payload-validator';
 import { ClickHouseIngestorService } from './clickhouse-ingestor.service';
 import { VoiceSessionService } from './voice-session.service';
 import {
@@ -77,6 +78,23 @@ export class IngestorQueueConsumer implements OnModuleInit, OnModuleDestroy {
       throw new Error(`Validation failed: ${msg}`);
     }
 
+    const payloadValidation = validatePayloadByEventType(
+      dto.eventType,
+      dto.payload ?? undefined,
+      {
+        channelId: dto.channelId,
+        discordUserId: dto.discordUserId,
+        userId: dto.userId,
+        commandName: dto.commandName,
+      },
+    );
+    if (!payloadValidation.valid) {
+      this.logger.warn(
+        `Payload validation failed for job ${job.id}, eventType=${dto.eventType}: ${payloadValidation.reason ?? 'unknown'}`,
+      );
+      return;
+    }
+
     const enrichment = await this.guildSettings.getSettings(dto.guildId);
 
     if (dto.eventType === 'VOICE_STATE_UPDATE') {
@@ -114,6 +132,11 @@ function toRawEvent(
   payload: Record<string, unknown>,
   enrichment: GuildSettingsEnrichment,
 ): RawEvent {
+  const channelId =
+    dto.channelId ??
+    (dto.eventType === 'MESSAGE_CREATE'
+      ? (payload.channelId as string | undefined)
+      : undefined);
   return {
     eventId: dto.eventId,
     eventTime: dto.eventTime,
@@ -122,7 +145,7 @@ function toRawEvent(
     discordGuildId: dto.discordGuildId,
     userId: dto.userId ?? undefined,
     discordUserId: dto.discordUserId ?? undefined,
-    channelId: dto.channelId ?? undefined,
+    channelId: channelId ?? undefined,
     roleId: dto.roleId ?? undefined,
     commandName: dto.commandName ?? undefined,
     planTier: (dto.planTier as string) ?? enrichment.planTier,

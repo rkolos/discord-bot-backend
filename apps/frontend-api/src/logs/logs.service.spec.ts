@@ -1,7 +1,7 @@
 import { NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import { GuildLogSetting } from '@app/shared';
 import { GuildsService } from '../guilds/guilds.service';
 import { LogsQueueService } from './logs-queue.service';
@@ -11,6 +11,7 @@ import { LOG_EVENT_TYPES } from './constants';
 describe('LogsService', () => {
   let service: LogsService;
   let logSettingsRepo: jest.Mocked<Repository<GuildLogSetting>>;
+  let txRepo: { find: jest.Mock; create: jest.Mock; save: jest.Mock };
   let guildsService: jest.Mocked<Pick<GuildsService, 'findGuildByDiscordId'>>;
   let queueService: jest.Mocked<Pick<LogsQueueService, 'addLogsConfigUpdate'>>;
 
@@ -19,11 +20,26 @@ describe('LogsService', () => {
   const mockGuild = { id: guildId, discordGuildId } as { id: string; discordGuildId: string };
 
   beforeEach(async () => {
+    txRepo = {
+      find: jest.fn(),
+      create: jest.fn(),
+      save: jest.fn(),
+    };
+    const mockQueryRunner = {
+      connect: jest.fn().mockResolvedValue(undefined),
+      startTransaction: jest.fn().mockResolvedValue(undefined),
+      commitTransaction: jest.fn().mockResolvedValue(undefined),
+      rollbackTransaction: jest.fn().mockResolvedValue(undefined),
+      release: jest.fn().mockResolvedValue(undefined),
+      manager: { getRepository: jest.fn().mockReturnValue(txRepo) },
+    };
+    const mockDataSource = {
+      createQueryRunner: jest.fn().mockReturnValue(mockQueryRunner),
+    };
     const mockLogSettingsRepo = {
       create: jest.fn(),
       save: jest.fn(),
       find: jest.fn(),
-      findOne: jest.fn(),
     };
     const mockGuildsService = {
       findGuildByDiscordId: jest.fn(),
@@ -36,6 +52,7 @@ describe('LogsService', () => {
       providers: [
         LogsService,
         { provide: getRepositoryToken(GuildLogSetting), useValue: mockLogSettingsRepo },
+        { provide: DataSource, useValue: mockDataSource },
         { provide: GuildsService, useValue: mockGuildsService },
         { provide: LogsQueueService, useValue: mockQueueService },
       ],
@@ -90,16 +107,9 @@ describe('LogsService', () => {
   describe('patchSettings', () => {
     it('creates new rows and calls addLogsConfigUpdate', async () => {
       guildsService.findGuildByDiscordId!.mockResolvedValue(mockGuild as never);
-      (logSettingsRepo.findOne as jest.Mock).mockResolvedValue(null);
-      const created = {
-        guildId,
-        eventType: 'member_join',
-        channelId: '987654321098765432',
-        enabled: true,
-        updatedAt: new Date(),
-      };
-      (logSettingsRepo.create as jest.Mock).mockReturnValue(created);
-      (logSettingsRepo.save as jest.Mock).mockResolvedValue(created);
+      txRepo.find.mockResolvedValue([]);
+      txRepo.create.mockImplementation((entity: unknown) => entity);
+      txRepo.save.mockResolvedValue(undefined);
       (logSettingsRepo.find as jest.Mock).mockResolvedValue([]);
 
       await service.patchSettings(discordGuildId, {
@@ -123,8 +133,9 @@ describe('LogsService', () => {
         enabled: true,
         updatedAt: new Date(),
       };
-      (logSettingsRepo.findOne as jest.Mock).mockResolvedValue(existing);
-      (logSettingsRepo.save as jest.Mock).mockResolvedValue({ ...existing, channelId: '987654321098765432' });
+      txRepo.find.mockResolvedValue([existing]);
+      txRepo.create.mockImplementation((entity: unknown) => entity);
+      txRepo.save.mockResolvedValue(undefined);
       (logSettingsRepo.find as jest.Mock).mockResolvedValue([]);
 
       await service.patchSettings(discordGuildId, {
@@ -141,9 +152,9 @@ describe('LogsService', () => {
 
     it('maps event types correctly when patching multiple settings', async () => {
       guildsService.findGuildByDiscordId!.mockResolvedValue(mockGuild as never);
-      (logSettingsRepo.findOne as jest.Mock).mockResolvedValue(null);
-      (logSettingsRepo.create as jest.Mock).mockImplementation((entity) => entity);
-      (logSettingsRepo.save as jest.Mock).mockResolvedValue(undefined);
+      txRepo.find.mockResolvedValue([]);
+      txRepo.create.mockImplementation((entity: unknown) => entity);
+      txRepo.save.mockResolvedValue(undefined);
       (logSettingsRepo.find as jest.Mock).mockResolvedValue([]);
 
       await service.patchSettings(discordGuildId, {
@@ -153,7 +164,7 @@ describe('LogsService', () => {
         ],
       });
 
-      expect(logSettingsRepo.create).toHaveBeenCalledWith(
+      expect(txRepo.create).toHaveBeenCalledWith(
         expect.objectContaining({
           guildId,
           eventType: 'member_leave',
@@ -161,7 +172,7 @@ describe('LogsService', () => {
           enabled: true,
         }),
       );
-      expect(logSettingsRepo.create).toHaveBeenCalledWith(
+      expect(txRepo.create).toHaveBeenCalledWith(
         expect.objectContaining({
           guildId,
           eventType: 'message_delete',

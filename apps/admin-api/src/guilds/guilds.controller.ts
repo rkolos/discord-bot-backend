@@ -36,7 +36,7 @@ export class GuildsController {
       joinedAt: string;
       historySyncStatus: string;
     }>;
-    meta: { total: number; page: number; limit: number; totalPages: number };
+    meta: { total: number; page: number; limit: number; totalPages: number; hasNextPage: boolean };
   }> {
     return this.guildsService.getGuilds(
       query.page ?? 1,
