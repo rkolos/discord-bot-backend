@@ -11,6 +11,7 @@ import {
   Invoice,
   RefreshToken,
 } from '@app/shared';
+import { SharedAnalyticsService } from '@app/shared';
 import { GdprUserDeleteQueueService } from './gdpr-user-delete-queue.service';
 import { DiscordOAuthService } from '../auth/discord-oauth.service';
 
@@ -20,6 +21,7 @@ export class UserDataService {
     private readonly dataSource: DataSource,
     private readonly discordOAuth: DiscordOAuthService,
     private readonly gdprQueue: GdprUserDeleteQueueService,
+    private readonly sharedAnalytics: SharedAnalyticsService,
   ) {}
 
   /**
@@ -74,7 +76,7 @@ export class UserDataService {
     const companyMemberRepo = this.dataSource.getRepository(CompanyMember);
     const companyInviteRepo = this.dataSource.getRepository(CompanyInvite);
 
-    const [guilds, subscriptions, usageLimits, invoices, refreshTokensMeta, companiesOwned, companyMemberships, invitesSent] =
+    const [guilds, subscriptions, usageLimits, invoices, refreshTokensMeta, companiesOwned, companyMemberships, invitesSent, analytics] =
       await Promise.all([
         guildRepo.find({ where: { ownerId: user.id }, select: ['id', 'discordGuildId', 'name', 'createdAt', 'status', 'subscriptionTier'] }),
         userSubRepo.find({ where: { userId: user.id }, relations: ['plan'], select: { plan: { id: true, name: true } } }),
@@ -84,6 +86,7 @@ export class UserDataService {
         companyRepo.find({ where: { ownerId: user.id }, select: ['id', 'name', 'createdAt'] }),
         companyMemberRepo.find({ where: { userId: user.id }, relations: ['company'], select: { company: { id: true, name: true } } }),
         companyInviteRepo.find({ where: { invitedBy: user.id }, select: ['id', 'email', 'role', 'expiresAt', 'createdAt'] }),
+        this.sharedAnalytics.getUserStatsForExport(user.id, user.discordId ?? null),
       ]);
 
     return {
@@ -124,6 +127,10 @@ export class UserDataService {
         companyName: (m as { company?: { name: string } }).company?.name,
       })),
       companyInvitesSent: invitesSent.map((i) => ({ id: i.id, email: i.email, role: i.role, expiresAt: i.expiresAt, createdAt: i.createdAt })),
+      analytics: {
+        totalMessages: analytics.totalMessages,
+        totalVoiceMinutes: analytics.totalVoiceMinutes,
+      },
     };
   }
 }

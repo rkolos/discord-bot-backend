@@ -75,4 +75,59 @@ describe('SharedAnalyticsService', () => {
       expect(result).toEqual([]);
     });
   });
+
+  describe('getUserStatsForExport', () => {
+    it('returns zeros when both userId and discordId are empty', async () => {
+      const result = await service.getUserStatsForExport('', null);
+      expect(result).toEqual({ totalMessages: 0, totalVoiceMinutes: 0 });
+      expect(clickhouse.query).not.toHaveBeenCalled();
+    });
+
+    it('returns stats from ClickHouse when both userId and discordId provided', async () => {
+      (clickhouse.query as jest.Mock).mockResolvedValue({
+        json: async () => [{ totalMessages: 100, totalVoiceMinutes: 45 }],
+      });
+
+      const result = await service.getUserStatsForExport(
+        'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
+        '123456789012345678',
+      );
+
+      expect(result).toEqual({ totalMessages: 100, totalVoiceMinutes: 45 });
+      expect(clickhouse.query).toHaveBeenCalledWith(
+        expect.objectContaining({
+          query_params: expect.objectContaining({
+            userId: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
+            discordId: '123456789012345678',
+          }),
+        }),
+      );
+    });
+
+    it('returns stats when only userId provided', async () => {
+      (clickhouse.query as jest.Mock).mockResolvedValue({
+        json: async () => [{ totalMessages: 50, totalVoiceMinutes: 20 }],
+      });
+
+      const result = await service.getUserStatsForExport(
+        'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
+        null,
+      );
+
+      expect(result).toEqual({ totalMessages: 50, totalVoiceMinutes: 20 });
+    });
+
+    it('returns zeros when ClickHouse returns empty rows', async () => {
+      (clickhouse.query as jest.Mock).mockResolvedValue({
+        json: async () => [],
+      });
+
+      const result = await service.getUserStatsForExport(
+        'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
+        '123456789012345678',
+      );
+
+      expect(result).toEqual({ totalMessages: 0, totalVoiceMinutes: 0 });
+    });
+  });
 });

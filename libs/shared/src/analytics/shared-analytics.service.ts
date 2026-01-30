@@ -188,6 +188,60 @@ export class SharedAnalyticsService {
     }));
   }
 
+  async getUserStatsForExport(
+    userId: string,
+    discordId: string | null,
+  ): Promise<{ totalMessages: number; totalVoiceMinutes: number }> {
+    const db = this.getDatabase();
+    const hasUserId = userId != null && userId.trim() !== '';
+    const hasDiscordId =
+      discordId != null && typeof discordId === 'string' && discordId.trim() !== '';
+
+    if (!hasUserId && !hasDiscordId) {
+      return { totalMessages: 0, totalVoiceMinutes: 0 };
+    }
+
+    let whereClause: string;
+    const queryParams: Record<string, unknown> = {};
+
+    if (hasUserId && hasDiscordId) {
+      whereClause =
+        '(discord_user_id = {discordId:String} OR user_id = {userId:UUID}) AND (discord_user_id != \'\' OR user_id IS NOT NULL)';
+      queryParams.userId = userId;
+      queryParams.discordId = discordId;
+    } else if (hasUserId) {
+      whereClause = 'user_id = {userId:UUID}';
+      queryParams.userId = userId;
+    } else {
+      whereClause = 'discord_user_id = {discordId:String}';
+      queryParams.discordId = discordId!;
+    }
+
+    const result = await this.clickhouse.query({
+      query: `
+        SELECT
+          countIf(event_type = 'MESSAGE_CREATE') AS totalMessages,
+          sum(if(event_type = 'VOICE_STATE_UPDATE', toUInt64(JSONExtractInt(payload, 'voiceMinutes')), 0)) AS totalVoiceMinutes
+        FROM ${db}.raw_events
+        WHERE ${whereClause}
+      `,
+      query_params: queryParams,
+    });
+
+    const rows = (await result.json()) as {
+      totalMessages: string | number;
+      totalVoiceMinutes: string | number;
+    }[];
+    const data = Array.isArray(rows)
+      ? rows
+      : (rows as unknown as { data?: typeof rows }).data ?? [];
+    const row = data[0] as { totalMessages?: string | number; totalVoiceMinutes?: string | number } | undefined;
+    return {
+      totalMessages: Number(row?.totalMessages ?? 0),
+      totalVoiceMinutes: Number(row?.totalVoiceMinutes ?? 0),
+    };
+  }
+
   private async parseSingleNumber(
     result: Awaited<ReturnType<ClickHouseService['query']>>,
     defaultValue: number,
