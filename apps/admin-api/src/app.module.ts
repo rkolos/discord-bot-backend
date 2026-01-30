@@ -11,6 +11,7 @@ import { TestValidationController } from './test-validation.controller';
 import { AuthModule } from './auth/auth.module';
 import { AdminAuthGuard } from './auth/admin-auth.guard';
 import { StatsModule } from './stats/stats.module';
+import { HealthModule } from './health/health.module';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { StatsModule } from './stats/stats.module';
     ThrottlerModule.forRoot([{ ttl: 60_000, limit: 100 }]),
     AuthModule,
     StatsModule,
+    HealthModule,
   ],
   controllers: [TestValidationController],
   providers: [

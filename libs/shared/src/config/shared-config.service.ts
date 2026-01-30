@@ -58,11 +58,16 @@ export class SharedConfigService {
         'ENCRYPTION_KEY_V1 must be exactly 32 characters (runtime check failed)',
       );
     }
+    const jwtSecret = this.configService.get<string>('JWT_SECRET') ?? '';
+    const anonymizationSalt =
+      this.configService.get<string>('ANONYMIZATION_SALT') ??
+      (jwtSecret ? jwtSecret.slice(0, 32) : '');
     return {
-      jwtSecret: this.configService.get<string>('JWT_SECRET') ?? '',
+      jwtSecret,
       adminJwtSecret:
         this.configService.get<string>('ADMIN_JWT_SECRET') ?? '',
       encryptionKeyV1,
+      anonymizationSalt,
     };
   }
 

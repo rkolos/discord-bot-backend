@@ -7,6 +7,10 @@ import type { RawEvent } from './ingestor.types';
 import { RawEventDto } from './dto/raw-event.dto';
 import { ClickHouseIngestorService } from './clickhouse-ingestor.service';
 import { VoiceSessionService } from './voice-session.service';
+import {
+  GuildSettingsEnrichmentService,
+  type GuildSettingsEnrichment,
+} from './guild-settings-enrichment.service';
 
 export const INGESTOR_RAW_EVENTS_QUEUE_NAME = 'ingestor-raw-events';
 
@@ -35,6 +39,7 @@ export class IngestorQueueConsumer implements OnModuleInit, OnModuleDestroy {
     private readonly config: SharedConfigService,
     private readonly clickhouseIngestor: ClickHouseIngestorService,
     private readonly voiceSession: VoiceSessionService,
+    private readonly guildSettings: GuildSettingsEnrichmentService,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -72,6 +77,8 @@ export class IngestorQueueConsumer implements OnModuleInit, OnModuleDestroy {
       throw new Error(`Validation failed: ${msg}`);
     }
 
+    const enrichment = await this.guildSettings.getSettings(dto.guildId);
+
     if (dto.eventType === 'VOICE_STATE_UPDATE') {
       const userId = dto.discordUserId ?? dto.userId ?? null;
       if (!userId) {
@@ -86,23 +93,27 @@ export class IngestorQueueConsumer implements OnModuleInit, OnModuleDestroy {
       if (!isJoin && userId) {
         const leave = await this.voiceSession.recordLeave(dto.guildId, userId);
         const payload = { ...((dto.payload as Record<string, unknown>) ?? {}), voiceMinutes: leave?.voiceMinutes ?? 0 };
-        const raw = toRawEvent(dto, payload);
+        const raw = toRawEvent(dto, payload, enrichment);
         this.clickhouseIngestor.pushEvent(raw);
         return;
       }
       if (!isJoin && !userId) {
-        const raw = toRawEvent(dto, (dto.payload as Record<string, unknown>) ?? {});
+        const raw = toRawEvent(dto, (dto.payload as Record<string, unknown>) ?? {}, enrichment);
         this.clickhouseIngestor.pushEvent(raw);
         return;
       }
     }
 
-    const raw = toRawEvent(dto, (dto.payload as Record<string, unknown>) ?? {});
+    const raw = toRawEvent(dto, (dto.payload as Record<string, unknown>) ?? {}, enrichment);
     this.clickhouseIngestor.pushEvent(raw);
   }
 }
 
-function toRawEvent(dto: RawEventDto, payload: Record<string, unknown>): RawEvent {
+function toRawEvent(
+  dto: RawEventDto,
+  payload: Record<string, unknown>,
+  enrichment: GuildSettingsEnrichment,
+): RawEvent {
   return {
     eventId: dto.eventId,
     eventTime: dto.eventTime,
@@ -114,9 +125,10 @@ function toRawEvent(dto: RawEventDto, payload: Record<string, unknown>): RawEven
     channelId: dto.channelId ?? undefined,
     roleId: dto.roleId ?? undefined,
     commandName: dto.commandName ?? undefined,
-    planTier: (dto.planTier as string) ?? 'free',
+    planTier: (dto.planTier as string) ?? enrichment.planTier,
     isBotGenerated: dto.isBotGenerated ?? false,
     payload: JSON.stringify(payload),
     isHistorical: false,
+    anonymizeUserData: enrichment.anonymizeUserData,
   };
 }

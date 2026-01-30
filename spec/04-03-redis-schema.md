@@ -121,4 +121,12 @@ sn:prod:frontend-api:auth:session:{sessionId}
   - **Producer:** Frontend API (при PATCH настроек логов).
   - **Consumer:** Background Worker (воркеры обновляют кэш подписок на события).
 
+### GDPR: удаление данных пользователя (Right to be Forgotten)
+
+- `sn:{env}:workers-queue-gdpr-user-delete` (имя очереди в BullMQ без двоеточий: `workers-queue-gdpr-user-delete`)
+  - **Назначение:** удаление/анонимизация всех записей пользователя в ClickHouse после полного удаления профиля из PostgreSQL (DELETE /api/users/me/data).
+  - **Producer:** Frontend API (после успешного удаления пользователя).
+  - **Consumer:** Ingestor Worker.
+  - **Payload:** `{ discordUserId: string }` — Discord Snowflake ID пользователя; выполняется `ALTER TABLE raw_events DELETE WHERE discord_user_id = :discordUserId`.
+
 > **Важно:** имена очередей в BullMQ должны совпадать в producer/consumer и быть одинаковыми во всех средах через префикс `sn:{env}`.

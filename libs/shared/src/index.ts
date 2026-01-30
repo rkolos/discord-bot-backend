@@ -1,3 +1,4 @@
+export * from './anonymization.util';
 export * from './clickhouse';
 export * from './config';
 export * from './crypto';

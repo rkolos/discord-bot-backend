@@ -55,6 +55,7 @@ Complete list of error codes used throughout the API.
 
 - `SUBSCRIPTION_UPGRADE_FAILED` - Failed to upgrade subscription
 - `RATE_LIMIT_EXCEEDED` - Rate limit exceeded
+- `USER_DELETE_FAILED` - Failed to delete user data (Right to be Forgotten)
 
 ---
 

@@ -14,4 +14,6 @@ export interface RawEvent {
   isBotGenerated: boolean;
   payload: string;
   isHistorical?: boolean;
+  /** При true перед записью в ClickHouse discord_user_id заменяется на anonymized_hash. */
+  anonymizeUserData?: boolean;
 }

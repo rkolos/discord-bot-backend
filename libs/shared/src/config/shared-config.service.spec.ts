@@ -231,5 +231,37 @@ describe('SharedConfigService', () => {
         'ENCRYPTION_KEY_V1 must be exactly 32 characters (runtime check failed)',
       );
     });
+
+    it('returns anonymizationSalt from ANONYMIZATION_SALT when set', () => {
+      const config = mockConfigService({
+        ENCRYPTION_KEY_V1: 'a'.repeat(32),
+        JWT_SECRET: 'jwt',
+        ANONYMIZATION_SALT: 'my-privacy-salt',
+      });
+      const svc = new SharedConfigService(config);
+      expect(svc.auth.anonymizationSalt).toBe('my-privacy-salt');
+    });
+
+    it('returns first 32 chars of JWT_SECRET as anonymizationSalt when ANONYMIZATION_SALT not set', () => {
+      const config = mockConfigService({
+        ENCRYPTION_KEY_V1: 'a'.repeat(32),
+        JWT_SECRET: 'jwt-secret-longer-than-32-characters-here',
+      });
+      const svc = new SharedConfigService(config);
+      expect(svc.auth.anonymizationSalt).toBe(
+        'jwt-secret-longer-than-32-charac',
+      );
+      expect(svc.auth.anonymizationSalt).toHaveLength(32);
+    });
+
+    it('returns empty string for anonymizationSalt when both ANONYMIZATION_SALT and JWT_SECRET missing', () => {
+      const config = mockConfigService({
+        ENCRYPTION_KEY_V1: 'a'.repeat(32),
+        JWT_SECRET: undefined,
+        ANONYMIZATION_SALT: undefined,
+      });
+      const svc = new SharedConfigService(config);
+      expect(svc.auth.anonymizationSalt).toBe('');
+    });
   });
 });

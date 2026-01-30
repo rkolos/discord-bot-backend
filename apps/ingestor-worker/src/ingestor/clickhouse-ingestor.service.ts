@@ -4,7 +4,11 @@ import {
   OnModuleDestroy,
   OnModuleInit,
 } from '@nestjs/common';
-import { ClickHouseService, SharedConfigService } from '@app/shared';
+import {
+  ClickHouseService,
+  SharedConfigService,
+  computeAnonymizedHash,
+} from '@app/shared';
 import type { RawEvent } from './ingestor.types';
 import { computeRetentionUntil } from './retention.helper';
 
@@ -69,7 +73,8 @@ export class ClickHouseIngestorService
     for (let attempt = 1; attempt <= MAX_INSERT_RETRIES; attempt++) {
       try {
         const table = `${this.config.clickhouse.database || 'default'}.raw_events`;
-        const values = batch.map((e) => toClickHouseRow(e));
+        const salt = this.config.auth.anonymizationSalt;
+        const values = batch.map((e) => toClickHouseRow(e, salt));
         await this.clickhouse.insert({
           table,
           values,
@@ -100,7 +105,10 @@ export class ClickHouseIngestorService
   }
 }
 
-function toClickHouseRow(e: RawEvent): Record<string, unknown> {
+function toClickHouseRow(
+  e: RawEvent,
+  salt: string,
+): Record<string, unknown> {
   const eventTime = typeof e.eventTime === 'string' ? e.eventTime : e.eventTime.toISOString();
   const eventTimeStr = toClickHouseDateTime(eventTime);
   const eventDate = eventTimeStr.slice(0, 10);
@@ -110,6 +118,16 @@ function toClickHouseRow(e: RawEvent): Record<string, unknown> {
   );
   const ingestedAt = new Date();
 
+  const shouldAnonymize =
+    e.anonymizeUserData === true &&
+    e.discordUserId != null &&
+    String(e.discordUserId).trim() !== '';
+  const anonymizedHash =
+    shouldAnonymize && salt
+      ? computeAnonymizedHash(String(e.discordUserId), salt)
+      : null;
+  const discordUserIdForRow = shouldAnonymize ? '' : (e.discordUserId ?? '');
+
   return {
     event_id: e.eventId,
     event_time: eventTimeStr,
@@ -118,8 +136,8 @@ function toClickHouseRow(e: RawEvent): Record<string, unknown> {
     guild_id: e.guildId,
     discord_guild_id: e.discordGuildId,
     user_id: e.userId ?? null,
-    discord_user_id: e.discordUserId ?? '',
-    anonymized_hash: null,
+    discord_user_id: discordUserIdForRow,
+    anonymized_hash: anonymizedHash,
     channel_id: e.channelId ?? '',
     role_id: e.roleId ?? '',
     command_name: e.commandName ?? '',

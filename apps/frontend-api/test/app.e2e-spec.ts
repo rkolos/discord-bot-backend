@@ -544,3 +544,130 @@ describe('Frontend API E2E (analytics)', () => {
     });
   });
 });
+
+describe('Frontend API E2E (GDPR delete)', () => {
+  let pgContainer: Awaited<ReturnType<PostgreSqlContainer['start']>>;
+  let redisContainer: Awaited<ReturnType<RedisContainer['start']>>;
+  let app: { getHttpServer: () => unknown; close: () => Promise<void> };
+  let ds: DataSource;
+  let seededUser: User;
+  let jwtToken: string;
+
+  beforeAll(async () => {
+    pgContainer = await new PostgreSqlContainer('postgres:15-alpine')
+      .withDatabase('test')
+      .withUsername('postgres')
+      .withPassword('postgres')
+      .start();
+    redisContainer = await new RedisContainer('redis:7-alpine').start();
+
+    const { setTestIntegrationEnv } = await import('@app/shared/test-integration-env');
+    setTestIntegrationEnv({
+      NODE_ENV: 'test',
+      POSTGRES_HOST: pgContainer.getHost(),
+      POSTGRES_PORT: pgContainer.getPort(),
+      POSTGRES_USER: pgContainer.getUsername(),
+      POSTGRES_PASSWORD: pgContainer.getPassword(),
+      POSTGRES_DB: pgContainer.getDatabase(),
+      REDIS_HOST: redisContainer.getHost(),
+      REDIS_PORT: redisContainer.getPort(),
+      ENCRYPTION_KEY_V1: 'a'.repeat(32),
+      JWT_SECRET: 'e2e-gdpr-jwt-secret',
+    });
+
+    const {
+      Guild,
+      GuildStatus,
+      GuildSubscriptionTier,
+      User,
+      UserPlan,
+      UserStatus,
+      AllExceptionsFilter,
+    } = await import('@app/shared');
+    const { JwtService } = await import('@nestjs/jwt');
+
+    const { AppModule } = await import('../src/app.module');
+    const { BadRequestException, ValidationPipe } = await import('@nestjs/common');
+    const { HttpAdapterHost } = await import('@nestjs/core');
+    const { DataSource: TypeOrmDataSource } = await import('typeorm');
+
+    const moduleFixture = await Test.createTestingModule({
+      imports: [AppModule],
+    }).compile();
+
+    const nestApp = moduleFixture.createNestApplication();
+    nestApp.setGlobalPrefix('api');
+    const httpAdapterHost = nestApp.get(HttpAdapterHost);
+    nestApp.useGlobalFilters(new AllExceptionsFilter(httpAdapterHost));
+    nestApp.useGlobalPipes(
+      new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+        exceptionFactory: (errors: unknown) => new BadRequestException(errors),
+      }),
+    );
+    await nestApp.init();
+    app = nestApp;
+
+    ds = nestApp.get(TypeOrmDataSource);
+    await ds.runMigrations();
+
+    const userRepo = ds.getRepository(User);
+    const guildRepo = ds.getRepository(Guild);
+    const discordId = String(111222333444555666n + BigInt(Date.now() % 1000000000));
+    const user = await userRepo.save(
+      userRepo.create({
+        discordId,
+        username: 'e2e-gdpr-delete-user',
+        plan: UserPlan.FREE,
+        status: UserStatus.ACTIVE,
+      }),
+    );
+    seededUser = user;
+    const discordGuildId = String(999888777666555444n + BigInt(Date.now() % 1000000));
+    await guildRepo.save(
+      guildRepo.create({
+        discordGuildId,
+        name: 'E2E GDPR Guild',
+        ownerId: user.id,
+        status: GuildStatus.ACTIVE,
+        subscriptionTier: GuildSubscriptionTier.FREE,
+        memberCount: 0,
+        messageCount: '0',
+        isBotInGuild: false,
+      }),
+    );
+
+    const { SharedConfigService } = await import('@app/shared');
+    const sharedConfig = nestApp.get(SharedConfigService);
+    const jwtService = nestApp.get(JwtService);
+    jwtToken = jwtService.sign(
+      { sub: user.id },
+      { secret: sharedConfig.auth.jwtSecret, expiresIn: '1h' },
+    );
+  }, 120_000);
+
+  afterAll(async () => {
+    await app?.close();
+    if (ds?.isInitialized) await ds.destroy();
+    await redisContainer?.stop();
+    await pgContainer?.stop();
+  }, 30_000);
+
+  it('DELETE /api/users/me/data removes user; subsequent request with same JWT returns 401 and user is gone from DB', async () => {
+    await request(app.getHttpServer())
+      .delete('/api/users/me/data')
+      .set('Authorization', `Bearer ${jwtToken}`)
+      .expect(204);
+
+    const protectedRes = await request(app.getHttpServer())
+      .get('/api/users/me/data/export')
+      .set('Authorization', `Bearer ${jwtToken}`);
+    expect(protectedRes.status).toBe(401);
+
+    const userRepo = ds.getRepository(User);
+    const userAfter = await userRepo.findOne({ where: { id: seededUser.id } });
+    expect(userAfter).toBeNull();
+  });
+});

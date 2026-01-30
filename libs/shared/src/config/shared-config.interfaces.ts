@@ -30,6 +30,8 @@ export interface IAuthConfig {
   jwtSecret: string;
   adminJwtSecret?: string;
   encryptionKeyV1: string;
+  /** Соль для анонимизации Discord user ID (SHA-256). Fallback — фрагмент JWT_SECRET. */
+  anonymizationSalt: string;
 }
 
 export interface IDiscordConfig {

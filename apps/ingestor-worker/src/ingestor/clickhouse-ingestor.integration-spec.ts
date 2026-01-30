@@ -27,6 +27,9 @@ describe('ClickHouse Ingestor integration (batch insert)', () => {
       CLICKHOUSE_USER: opts.username ?? 'default',
       CLICKHOUSE_PASSWORD: opts.password ?? 'default',
       CLICKHOUSE_DB: db,
+      ENCRYPTION_KEY_V1: 'a'.repeat(32),
+      JWT_SECRET: 'jwt-secret',
+      ANONYMIZATION_SALT: 'integration-test-salt',
     });
 
     const { Test } = await import('@nestjs/testing');
@@ -270,5 +273,57 @@ describe('ClickHouse Ingestor integration (batch insert)', () => {
     expect(row?.today).toBeDefined();
     const todayStr = String(row?.today ?? '').slice(0, 10);
     expect(todayStr).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+
+  it('anonymization: event with anonymizeUserData true writes anonymized_hash and empty discord_user_id', async () => {
+    const { Test } = await import('@nestjs/testing');
+    const { SharedConfigModule } = await import('@app/shared');
+    const { ClickHouseModule } = await import('@app/shared');
+    const { ClickHouseIngestorService } = await import('./clickhouse-ingestor.service');
+    const { computeAnonymizedHash } = await import('@app/shared');
+
+    const mod = await Test.createTestingModule({
+      imports: [SharedConfigModule, ClickHouseModule.forRootAsync()],
+      providers: [ClickHouseIngestorService],
+    }).compile();
+
+    const ingestor = mod.get(ClickHouseIngestorService);
+    await (ingestor as unknown as { onModuleInit: () => Promise<void> }).onModuleInit();
+
+    const eventId = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890';
+    const discordUserId = '555666777888999000';
+    const guildId = 'b1eebc99-9c0b-4ef8-bb6d-6bb9bd380a11';
+    const salt = 'integration-test-salt';
+    const expectedHash = computeAnonymizedHash(discordUserId, salt);
+
+    ingestor.pushEvent({
+      eventId,
+      eventTime: new Date().toISOString(),
+      eventType: 'MESSAGE_CREATE',
+      guildId,
+      discordGuildId: '111222333444555678',
+      discordUserId,
+      planTier: 'free',
+      isBotGenerated: false,
+      payload: '{}',
+      anonymizeUserData: true,
+    });
+    await ingestor.flush();
+    await (ingestor as unknown as { onModuleDestroy: () => Promise<void> }).onModuleDestroy();
+
+    await clickhouse.exec({
+      query: `OPTIMIZE TABLE ${db}.raw_events FINAL`,
+    });
+
+    const res = await clickhouse.query({
+      query: `SELECT event_id, discord_user_id, anonymized_hash FROM ${db}.raw_events WHERE event_id = {eventId:String}`,
+      query_params: { eventId },
+    });
+    type ChRow = { event_id: string; discord_user_id: string; anonymized_hash: string };
+    const j = (await res.json()) as ChRow[] | { data?: ChRow[] };
+    const rows: ChRow[] = Array.isArray(j) ? j : (j as { data?: ChRow[] }).data ?? [];
+    expect(rows.length).toBe(1);
+    expect(rows[0].discord_user_id).toBe('');
+    expect(rows[0].anonymized_hash).toBe(expectedHash);
   });
 });

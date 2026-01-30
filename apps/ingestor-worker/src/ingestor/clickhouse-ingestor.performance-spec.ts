@@ -27,6 +27,7 @@ describe('ClickHouse Ingestor performance (buffer batching)', () => {
     const mockConfig = {
       clickhouse: { database: 'default' },
       ingestor: { batchSize: 1000, batchIntervalMs: 5000 },
+      auth: { anonymizationSalt: 'test-salt' },
     };
 
     const mod: TestingModule = await Test.createTestingModule({
