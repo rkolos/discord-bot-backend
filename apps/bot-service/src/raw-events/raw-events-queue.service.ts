@@ -32,6 +32,10 @@ export class RawEventsQueueService implements OnModuleDestroy {
     await this.queue.add('interaction', payload, { priority: 0 });
   }
 
+  async addRawEvent(payload: RawEventJobPayload): Promise<void> {
+    await this.queue.add(payload.eventType, payload, { priority: 0 });
+  }
+
   async onModuleDestroy(): Promise<void> {
     await this.queue.close();
   }

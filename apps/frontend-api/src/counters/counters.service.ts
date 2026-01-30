@@ -1,12 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import {
-  Counter,
-  CounterStatus,
-  CounterType,
-  COUNTER_TEMPLATE_MAX_LENGTH,
-} from '@app/shared';
+import { Counter, CounterStatus, CounterType, previewCounterTemplate } from '@app/shared';
 import { GuildsService } from '../guilds/guilds.service';
 import { CountersQueueService } from './counters-queue.service';
 import type { CreateCounterDto } from './dto/create-counter.dto';
@@ -66,7 +61,7 @@ export class CountersService {
         message: 'Guild not found or access denied',
       });
     }
-    const channelName = this.previewTemplate(dto.template, dto.type);
+    const channelName = previewCounterTemplate(dto.template);
     const counter = this.counterRepository.create({
       guildId: guild.id,
       channelId: dto.channelId,
@@ -127,7 +122,7 @@ export class CountersService {
     if (dto.metric !== undefined) counter.metric = dto.metric ?? null;
     if (dto.template != null) {
       counter.template = dto.template;
-      counter.channelName = this.previewTemplate(dto.template, counter.type);
+      counter.channelName = previewCounterTemplate(dto.template);
     }
     if (dto.status != null) counter.status = dto.status;
     if (dto.target !== undefined)
@@ -172,20 +167,7 @@ export class CountersService {
    * Возвращает превью строки шаблона с подставленными примерами значений
    * (например Members: 1,234). Результат обрезается до COUNTER_TEMPLATE_MAX_LENGTH.
    */
-  previewTemplate(template: string, _type?: string): string {
-    const sampleCount = '1,234';
-    const sampleDate = new Date().toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    });
-    let result = template
-      .replace(/\{count\}/gi, sampleCount)
-      .replace(/\{date\}/gi, sampleDate)
-      .replace(/\{[a-zA-Z0-9_]+\}/g, sampleCount);
-    if (result.length > COUNTER_TEMPLATE_MAX_LENGTH) {
-      result = result.slice(0, COUNTER_TEMPLATE_MAX_LENGTH);
-    }
-    return result;
+  previewTemplate(template: string): string {
+    return previewCounterTemplate(template);
   }
 }

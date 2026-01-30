@@ -5,6 +5,7 @@ import { Repository } from 'typeorm';
 import { CryptoService, SharedConfigService } from '@app/shared';
 import { Guild, ServerSettings } from '@app/shared';
 import { MultiTokenConnectionManagerService } from './multi-token-connection-manager.service';
+import { MultiTokenEventsService } from './multi-token-events.service';
 import { GuildSyncService } from '../guild-sync/guild-sync.service';
 import { CommandRegistrationService } from '../commands/command-registration.service';
 
@@ -16,7 +17,7 @@ jest.mock('discord.js', () => ({
     once: jest.fn(),
     destroy: jest.fn().mockResolvedValue(undefined),
   })),
-  GatewayIntentBits: { Guilds: 1 },
+  GatewayIntentBits: { Guilds: 1, GuildMembers: 2, GuildMessages: 512, GuildVoiceStates: 256 },
 }));
 
 describe('MultiTokenConnectionManagerService', () => {
@@ -61,6 +62,17 @@ describe('MultiTokenConnectionManagerService', () => {
         {
           provide: CommandRegistrationService,
           useValue: { registerForToken: jest.fn().mockResolvedValue(undefined) },
+        },
+        {
+          provide: MultiTokenEventsService,
+          useValue: {
+            onGuildMemberAdd: jest.fn().mockResolvedValue(undefined),
+            onGuildMemberRemove: jest.fn().mockResolvedValue(undefined),
+            onMessageDelete: jest.fn().mockResolvedValue(undefined),
+            onMessageUpdate: jest.fn().mockResolvedValue(undefined),
+            onVoiceStateUpdate: jest.fn().mockResolvedValue(undefined),
+            onGuildMemberUpdate: jest.fn().mockResolvedValue(undefined),
+          },
         },
       ],
     }).compile();

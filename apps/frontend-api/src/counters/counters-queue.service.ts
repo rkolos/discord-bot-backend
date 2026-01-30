@@ -1,18 +1,13 @@
 import { Injectable, OnModuleDestroy } from '@nestjs/common';
 import { Queue } from 'bullmq';
-import { SharedConfigService } from '@app/shared';
+import {
+  COUNTERS_UPDATE_QUEUE_NAME,
+  type CounterUpdateJobPayload,
+  SharedConfigService,
+} from '@app/shared';
 import type { Counter } from '@app/shared';
 
-/** Имя очереди (BullMQ не допускает ":" в имени). Полный ключ Redis: sn:{env}:workers-queue-counters-update */
-export const COUNTERS_UPDATE_QUEUE_NAME = 'workers-queue-counters-update';
-
-export interface CounterUpdateJobPayload {
-  counter_id: string;
-  guild_id: string;
-  channel_id: string;
-  type: string;
-  metric?: string | null;
-}
+export { COUNTERS_UPDATE_QUEUE_NAME, type CounterUpdateJobPayload };
 
 @Injectable()
 export class CountersQueueService implements OnModuleDestroy {

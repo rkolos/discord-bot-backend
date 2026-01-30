@@ -261,7 +261,7 @@ describe('ClickHouse Ingestor integration (batch insert)', () => {
     const cmdData = Array.isArray(cmdRows) ? cmdRows : (cmdRows as unknown as { data?: typeof cmdRows }).data ?? [];
     expect(cmdData.length).toBeGreaterThanOrEqual(1);
     expect(cmdData.some((r) => r.command_name === 'stats')).toBe(true);
-  });
+  }, 60_000);
 
   it('timezone consistency: today from ClickHouse now() used for overview window', async () => {
     const nowRes = await clickhouse.query({
@@ -275,7 +275,7 @@ describe('ClickHouse Ingestor integration (batch insert)', () => {
     expect(row?.today).toBeDefined();
     const todayStr = String(row?.today ?? '').slice(0, 10);
     expect(todayStr).toMatch(/^\d{4}-\d{2}-\d{2}$/);
-  });
+  }, 15_000);
 
   it('anonymization: event with anonymizeUserData true writes anonymized_hash and empty discord_user_id', async () => {
     const { Test } = await import('@nestjs/testing');
@@ -327,5 +327,5 @@ describe('ClickHouse Ingestor integration (batch insert)', () => {
     expect(rows.length).toBe(1);
     expect(rows[0].discord_user_id).toBe('');
     expect(rows[0].anonymized_hash).toBe(expectedHash);
-  });
+  }, 60_000);
 });

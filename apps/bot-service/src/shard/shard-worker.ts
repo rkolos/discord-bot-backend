@@ -1,6 +1,6 @@
 /**
  * Entry для ShardingManager: запускается в дочернем процессе.
- * Читает shard id из process.argv, подключается к БД и Redis, создаёт Client и обрабатывает READY/GUILD_CREATE/GUILD_DELETE и interactionCreate.
+ * Читает shard id из process.argv, подключается к БД и Redis, создаёт Client и обрабатывает READY/GUILD_CREATE/GUILD_DELETE, interactionCreate, логи и счётчики.
  */
 import 'reflect-metadata';
 import { Client, GatewayIntentBits } from 'discord.js';
@@ -11,6 +11,7 @@ import {
   syncOnGuildDelete,
 } from '../guild-sync/guild-sync.updates';
 import { createInteractionHandler } from './interaction-handler';
+import { createShardEventHandlers } from './shard-event-handlers';
 
 const SHARD_ID = parseInt(process.argv[2] ?? '0', 10);
 const SHARD_COUNT = parseInt(process.argv[3] ?? '1', 10);
@@ -55,7 +56,12 @@ async function run(): Promise<void> {
   const shardKey = `sn:${envPrefix()}:bot-service:shard:${SHARD_ID}`;
 
   const client = new Client({
-    intents: [GatewayIntentBits.Guilds],
+    intents: [
+      GatewayIntentBits.Guilds,
+      GatewayIntentBits.GuildMembers,
+      GatewayIntentBits.GuildMessages,
+      GatewayIntentBits.GuildVoiceStates,
+    ],
     shards: [SHARD_ID],
     shardCount: SHARD_COUNT,
   });
@@ -80,6 +86,20 @@ async function run(): Promise<void> {
     redisPrefix: prefix,
     internalBaseUrl: internalBaseUrl(),
     getGuildId,
+  });
+
+  const eventHandlers = createShardEventHandlers({
+    redis,
+    redisPrefix: prefix,
+    redisHost,
+    redisPort,
+    redisPassword,
+    getGuildId,
+    fetchChannel: async (channelId: string) => {
+      const ch = await client.channels.fetch(channelId);
+      if (!ch || !('send' in ch)) return null;
+      return ch as unknown as { send: (opts: { embeds: unknown[] }) => Promise<unknown> };
+    },
   });
 
   client.on('interactionCreate', async (interaction) => {
@@ -127,6 +147,63 @@ async function run(): Promise<void> {
       });
     } catch (err) {
       console.error(`[shard-worker] guildDelete sync error: ${(err as Error).message}`);
+    }
+  });
+
+  client.on('guildMemberAdd', async (member) => {
+    try {
+      await eventHandlers.onGuildMemberAdd(member);
+    } catch (err) {
+      console.error(`[shard-worker] guildMemberAdd error: ${(err as Error).message}`);
+    }
+  });
+
+  client.on('guildMemberRemove', async (member) => {
+    try {
+      await eventHandlers.onGuildMemberRemove(member);
+    } catch (err) {
+      console.error(`[shard-worker] guildMemberRemove error: ${(err as Error).message}`);
+    }
+  });
+
+  client.on('messageDelete', async (message) => {
+    try {
+      await eventHandlers.onMessageDelete(message as Parameters<typeof eventHandlers.onMessageDelete>[0]);
+    } catch (err) {
+      console.error(`[shard-worker] messageDelete error: ${(err as Error).message}`);
+    }
+  });
+
+  client.on('messageUpdate', async (oldMessage, newMessage) => {
+    try {
+      await eventHandlers.onMessageUpdate(
+        oldMessage as Parameters<typeof eventHandlers.onMessageUpdate>[0],
+        newMessage as Parameters<typeof eventHandlers.onMessageUpdate>[1],
+      );
+    } catch (err) {
+      console.error(`[shard-worker] messageUpdate error: ${(err as Error).message}`);
+    }
+  });
+
+  client.on('voiceStateUpdate', async (oldState, newState) => {
+    try {
+      await eventHandlers.onVoiceStateUpdate(
+        oldState as Parameters<typeof eventHandlers.onVoiceStateUpdate>[0],
+        newState as Parameters<typeof eventHandlers.onVoiceStateUpdate>[1],
+      );
+    } catch (err) {
+      console.error(`[shard-worker] voiceStateUpdate error: ${(err as Error).message}`);
+    }
+  });
+
+  client.on('guildMemberUpdate', async (oldMember, newMember) => {
+    try {
+      await eventHandlers.onGuildMemberUpdate(
+        oldMember as Parameters<typeof eventHandlers.onGuildMemberUpdate>[0],
+        newMember as Parameters<typeof eventHandlers.onGuildMemberUpdate>[1],
+      );
+    } catch (err) {
+      console.error(`[shard-worker] guildMemberUpdate error: ${(err as Error).message}`);
     }
   });
 

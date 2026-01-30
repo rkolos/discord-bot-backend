@@ -8,6 +8,7 @@ import { CryptoService, Guild, ServerSettings, SharedConfigService } from '@app/
 import { GuildSyncService } from '../guild-sync/guild-sync.service';
 import { CommandRegistrationService } from '../commands/command-registration.service';
 import { createInteractionHandler } from '../shard/interaction-handler';
+import { MultiTokenEventsService } from './multi-token-events.service';
 
 @Injectable()
 export class MultiTokenConnectionManagerService
@@ -28,6 +29,7 @@ export class MultiTokenConnectionManagerService
     private readonly sharedConfig: SharedConfigService,
     private readonly configService: ConfigService,
     private readonly commandRegistration: CommandRegistrationService,
+    private readonly eventsService: MultiTokenEventsService,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -69,7 +71,12 @@ export class MultiTokenConnectionManagerService
       }
 
       const client = new Client({
-        intents: [GatewayIntentBits.Guilds],
+        intents: [
+          GatewayIntentBits.Guilds,
+          GatewayIntentBits.GuildMembers,
+          GatewayIntentBits.GuildMessages,
+          GatewayIntentBits.GuildVoiceStates,
+        ],
       });
 
       const guildIdUuid = settings.guildId;
@@ -130,6 +137,54 @@ export class MultiTokenConnectionManagerService
         }
       });
 
+      client.on('guildMemberAdd', async (member) => {
+        try {
+          await this.eventsService.onGuildMemberAdd(member, client as import('discord.js').Client<true>);
+        } catch (err) {
+          this.logger.warn(`guildMemberAdd error: ${(err as Error).message}`);
+        }
+      });
+
+      client.on('guildMemberRemove', async (member) => {
+        try {
+          await this.eventsService.onGuildMemberRemove(member, client as import('discord.js').Client<true>);
+        } catch (err) {
+          this.logger.warn(`guildMemberRemove error: ${(err as Error).message}`);
+        }
+      });
+
+      client.on('messageDelete', async (message) => {
+        try {
+          await this.eventsService.onMessageDelete(message, client as import('discord.js').Client<true>);
+        } catch (err) {
+          this.logger.warn(`messageDelete error: ${(err as Error).message}`);
+        }
+      });
+
+      client.on('messageUpdate', async (oldMessage, newMessage) => {
+        try {
+          await this.eventsService.onMessageUpdate(oldMessage, newMessage, client as import('discord.js').Client<true>);
+        } catch (err) {
+          this.logger.warn(`messageUpdate error: ${(err as Error).message}`);
+        }
+      });
+
+      client.on('voiceStateUpdate', async (oldState, newState) => {
+        try {
+          await this.eventsService.onVoiceStateUpdate(oldState, newState, client as import('discord.js').Client<true>);
+        } catch (err) {
+          this.logger.warn(`voiceStateUpdate error: ${(err as Error).message}`);
+        }
+      });
+
+      client.on('guildMemberUpdate', async (oldMember, newMember) => {
+        try {
+          await this.eventsService.onGuildMemberUpdate(oldMember, newMember, client as import('discord.js').Client<true>);
+        } catch (err) {
+          this.logger.warn(`guildMemberUpdate error: ${(err as Error).message}`);
+        }
+      });
+
       try {
         await client.login(token);
         this.customClients.set(guildIdUuid, client);
@@ -169,5 +224,12 @@ export class MultiTokenConnectionManagerService
    */
   getTokenKindForGuild(guildIdUuid: string): 'main' | 'custom' {
     return this.hasCustomTokenForGuild(guildIdUuid) ? 'custom' : 'main';
+  }
+
+  /**
+   * Возвращает Discord Client для гильдии с кастомным токеном, иначе null.
+   */
+  getClientForGuild(guildIdUuid: string): Client | null {
+    return this.customClients.get(guildIdUuid) ?? null;
   }
 }

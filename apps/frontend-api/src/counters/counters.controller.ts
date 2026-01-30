@@ -47,10 +47,7 @@ export class CountersController {
     @Param() params: GuildIdParamDto,
     @Body() dto: PreviewCounterDto,
   ): Promise<{ data: { preview: string } }> {
-    const preview = this.countersService.previewTemplate(
-      dto.template,
-      dto.type,
-    );
+    const preview = this.countersService.previewTemplate(dto.template);
     return { data: { preview } };
   }
 
