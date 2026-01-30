@@ -11,6 +11,13 @@ async function bootstrap() {
 
   const port = process.env.PORT ?? process.env.HEALTH_PORT ?? 3003;
   await app.listen(port);
+
+  await new Promise<void>((resolve) => {
+    process.on('SIGINT', () => resolve());
+    process.on('SIGTERM', () => resolve());
+  });
+
+  await app.close();
 }
 
 void bootstrap();

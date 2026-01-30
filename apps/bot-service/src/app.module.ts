@@ -4,6 +4,7 @@ import {
   SharedConfigModule,
 } from '@app/shared';
 import { Module } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
 import { CommandsModule } from './commands/commands.module';
 import { GuildSyncModule } from './guild-sync/guild-sync.module';
 import { HealthModule } from './health/health.module';
@@ -14,6 +15,7 @@ import { ShardingModule } from './sharding/sharding.module';
 
 @Module({
   imports: [
+    ConfigModule.forRoot({ isGlobal: true }),
     SharedConfigModule,
     DatabaseModule,
     RedisModule.forRootAsync(),
