@@ -16,6 +16,7 @@ import { OnboardGuildDto } from './dto/onboard-guild.dto';
 import { GuildIdParamDto } from './dto/guild-id-param.dto';
 import { PatchGuildModulesDto } from './dto/patch-guild-modules.dto';
 import { PatchGuildTokenDto } from './dto/patch-guild-token.dto';
+import { PatchSettingsDto } from './dto/patch-settings.dto';
 import { GuildAdminGuard } from './guards/guild-admin.guard';
 import type { GuildSettingsResponseDto, GuildChannelDto } from './guilds.service';
 
@@ -53,6 +54,16 @@ export class GuildsController {
     return { data };
   }
 
+  @Patch(':guildId/settings')
+  @UseGuards(JwtAuthGuard, GuildAdminGuard)
+  async updateSettings(
+    @Param() params: GuildIdParamDto,
+    @Body() dto: PatchSettingsDto,
+  ): Promise<{ data: GuildSettingsResponseDto }> {
+    const data = await this.guildsService.updateSettings(params.guildId, dto);
+    return { data };
+  }
+
   @Patch(':guildId/modules')
   @UseGuards(JwtAuthGuard, GuildAdminGuard)
   async updateModules(
@@ -81,6 +92,53 @@ export class GuildsController {
     @Param() params: GuildIdParamDto,
   ): Promise<{ data: GuildChannelDto[] }> {
     const data = await this.guildsService.getChannelsForGuild(params.guildId);
+    return { data };
+  }
+
+  @Get(':guildId/stats')
+  @UseGuards(JwtAuthGuard, GuildAdminGuard)
+  async getStats(
+    @Param() params: GuildIdParamDto,
+  ): Promise<{
+    data: {
+      totalMembers: number;
+      totalMessages: number;
+      activeMembers: number;
+      voiceMinutes: number;
+    };
+  }> {
+    const data = await this.guildsService.getGuildStats(params.guildId);
+    return { data };
+  }
+
+  @Get(':guildId/bot-status')
+  @UseGuards(JwtAuthGuard, GuildAdminGuard)
+  async getBotStatus(
+    @Param() params: GuildIdParamDto,
+  ): Promise<{
+    data: { status: string; lastSeen: string | null; version: string };
+  }> {
+    const data = await this.guildsService.getBotStatus(params.guildId);
+    return { data };
+  }
+
+  @Get(':guildId/modules')
+  @UseGuards(JwtAuthGuard, GuildAdminGuard)
+  async getModules(
+    @Param() params: GuildIdParamDto,
+  ): Promise<{
+    data: Array<{ id: string; name: string; enabled: boolean; hasError: boolean }>;
+  }> {
+    const data = await this.guildsService.getModules(params.guildId);
+    return { data };
+  }
+
+  @Get(':guildId/activity-sparkline')
+  @UseGuards(JwtAuthGuard, GuildAdminGuard)
+  async getActivitySparkline(
+    @Param() params: GuildIdParamDto,
+  ): Promise<{ data: number[] }> {
+    const data = await this.guildsService.getActivitySparkline(params.guildId);
     return { data };
   }
 }

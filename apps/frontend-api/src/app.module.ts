@@ -5,7 +5,11 @@ import {
 } from '@app/shared';
 import { Module } from '@nestjs/common';
 import { AuthModule } from './auth/auth.module';
+import { PublicModule } from './public/public.module';
+import { MeModule } from './me/me.module';
+import { CompaniesModule } from './companies/companies.module';
 import { GuildsModule } from './guilds/guilds.module';
+import { WidgetsModule } from './widgets/widgets.module';
 import { CountersModule } from './counters/counters.module';
 import { LogsModule } from './logs/logs.module';
 import { AnalyticsModule } from './analytics/analytics.module';
@@ -19,7 +23,11 @@ import { TestValidationController } from './test-validation.controller';
     DatabaseModule,
     RedisModule.forRootAsync(),
     AuthModule,
+    PublicModule,
+    MeModule,
+    CompaniesModule,
     GuildsModule,
+    WidgetsModule,
     CountersModule,
     LogsModule,
     AnalyticsModule,

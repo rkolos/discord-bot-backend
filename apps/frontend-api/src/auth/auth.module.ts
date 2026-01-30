@@ -12,6 +12,7 @@ import {
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { DiscordOAuthService } from './discord-oauth.service';
+import { PasswordService } from './password.service';
 import { JwtStrategy } from './jwt.strategy';
 
 @Module({
@@ -32,7 +33,7 @@ import { JwtStrategy } from './jwt.strategy';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, DiscordOAuthService, JwtStrategy],
+  providers: [AuthService, DiscordOAuthService, PasswordService, JwtStrategy],
   exports: [AuthService, DiscordOAuthService],
 })
 export class AuthModule {}

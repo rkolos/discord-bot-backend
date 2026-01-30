@@ -16,6 +16,7 @@ import {
   GuildStatus,
   GuildSubscriptionTier,
   ServerSettings,
+  CompanyMember,
 } from '@app/shared';
 import { CryptoService, RedisService } from '@app/shared';
 import { SharedConfigService } from '@app/shared';
@@ -94,7 +95,256 @@ export class GuildsService {
     private readonly serverSettingsRepository: Repository<ServerSettings>,
     @InjectRepository(GuildModule)
     private readonly guildModuleRepository: Repository<GuildModule>,
+    @InjectRepository(CompanyMember)
+    private readonly companyMemberRepository: Repository<CompanyMember>,
   ) {}
+
+  async getMeGuildsPaginated(
+    userId: string,
+    page: number,
+    limit: number,
+    search?: string,
+  ): Promise<{
+    data: Array<{
+      id: string;
+      name: string;
+      icon: string;
+      status: string;
+      memberCount: number;
+      messageCount: number;
+      lastActivity: string | null;
+      ownerId: string;
+      subscriptionTier: string;
+      onlineMembers: number;
+      memberGrowth: number;
+      banner: string;
+    }>;
+    meta: { total: number; page: number; limit: number; totalPages: number };
+  }> {
+    const skip = (Math.max(1, page) - 1) * Math.min(100, Math.max(1, limit));
+    const take = Math.min(100, Math.max(1, limit));
+    const qb = this.guildRepository
+      .createQueryBuilder('g')
+      .where('g.owner_id = :userId', { userId });
+    if (search && search.trim()) {
+      qb.andWhere('g.name ILIKE :search', {
+        search: `%${search.trim()}%`,
+      });
+    }
+    const [guilds, total] = await qb
+      .orderBy('g.name', 'ASC')
+      .skip(skip)
+      .take(take)
+      .getManyAndCount();
+    const data = guilds.map((g) => ({
+      id: g.discordGuildId,
+      name: g.name,
+      icon: g.iconUrl ?? '',
+      status: g.status,
+      memberCount: g.memberCount,
+      messageCount: Number(g.messageCount ?? 0),
+      lastActivity: g.lastActivity?.toISOString() ?? null,
+      ownerId: g.ownerId,
+      subscriptionTier: g.subscriptionTier,
+      onlineMembers: g.onlineMembers ?? 0,
+      memberGrowth: g.memberGrowth ?? 0,
+      banner: g.banner ?? '',
+    }));
+    const totalPages = Math.ceil(total / take) || 1;
+    return {
+      data,
+      meta: { total, page: Math.max(1, page), limit: take, totalPages },
+    };
+  }
+
+  async getCompanyGuildsPaginated(
+    companyId: string,
+    userId: string,
+    page: number,
+    limit: number,
+    search?: string,
+  ): Promise<{
+    data: Array<{
+      id: string;
+      name: string;
+      icon: string;
+      status: string;
+      memberCount: number;
+      messageCount: number;
+      lastActivity: string | null;
+      ownerId: string;
+      subscriptionTier: string;
+      onlineMembers: number;
+      memberGrowth: number;
+      banner: string;
+    }>;
+    meta: { total: number; page: number; limit: number; totalPages: number };
+  }> {
+    const member = await this.companyMemberRepository.findOne({
+      where: { companyId, userId },
+    });
+    if (!member) {
+      throw new NotFoundException({
+        code: 'COMPANY_NOT_FOUND',
+        message: 'Company not found or access denied',
+      });
+    }
+    const members = await this.companyMemberRepository.find({
+      where: { companyId },
+      select: ['userId'],
+    });
+    const userIds = members.map((m) => m.userId);
+    if (userIds.length === 0) {
+      return {
+        data: [],
+        meta: { total: 0, page: 1, limit: Math.min(100, Math.max(1, limit)), totalPages: 0 },
+      };
+    }
+    const skip = (Math.max(1, page) - 1) * Math.min(100, Math.max(1, limit));
+    const take = Math.min(100, Math.max(1, limit));
+    const qb = this.guildRepository
+      .createQueryBuilder('g')
+      .where('g.owner_id IN (:...userIds)', { userIds });
+    if (search && search.trim()) {
+      qb.andWhere('g.name ILIKE :search', {
+        search: `%${search.trim()}%`,
+      });
+    }
+    const [guilds, total] = await qb
+      .orderBy('g.name', 'ASC')
+      .skip(skip)
+      .take(take)
+      .getManyAndCount();
+    const data = guilds.map((g) => ({
+      id: g.discordGuildId,
+      name: g.name,
+      icon: g.iconUrl ?? '',
+      status: g.status,
+      memberCount: g.memberCount,
+      messageCount: Number(g.messageCount ?? 0),
+      lastActivity: g.lastActivity?.toISOString() ?? null,
+      ownerId: g.ownerId,
+      subscriptionTier: g.subscriptionTier,
+      onlineMembers: g.onlineMembers ?? 0,
+      memberGrowth: g.memberGrowth ?? 0,
+      banner: g.banner ?? '',
+    }));
+    const totalPages = Math.ceil(total / take) || 1;
+    return {
+      data,
+      meta: { total, page: Math.max(1, page), limit: take, totalPages },
+    };
+  }
+
+  async getGuildStats(discordGuildId: string): Promise<{
+    totalMembers: number;
+    totalMessages: number;
+    activeMembers: number;
+    voiceMinutes: number;
+  }> {
+    const guild = await this.findGuildByDiscordId(discordGuildId);
+    if (!guild) {
+      throw new NotFoundException({
+        code: 'GUILD_NOT_FOUND',
+        message: 'Guild not found or access denied',
+      });
+    }
+    return {
+      totalMembers: guild.memberCount,
+      totalMessages: Number(guild.messageCount ?? 0),
+      activeMembers: guild.onlineMembers ?? 0,
+      voiceMinutes: 0,
+    };
+  }
+
+  async getBotStatus(discordGuildId: string): Promise<{
+    status: 'online' | 'offline' | 'error';
+    lastSeen: string | null;
+    version: string;
+  }> {
+    const guild = await this.findGuildByDiscordId(discordGuildId);
+    if (!guild) {
+      throw new NotFoundException({
+        code: 'GUILD_NOT_FOUND',
+        message: 'Guild not found or access denied',
+      });
+    }
+    const settings = await this.serverSettingsRepository.findOne({
+      where: { guildId: guild.id },
+    });
+    const status = settings?.botConnected ? 'online' : 'offline';
+    return {
+      status,
+      lastSeen: settings?.lastConnected?.toISOString() ?? null,
+      version: '1.0',
+    };
+  }
+
+  async getModules(discordGuildId: string): Promise<GuildSettingsResponseDto['modules']> {
+    const settings = await this.getSettings(discordGuildId);
+    return settings.modules;
+  }
+
+  async getActivitySparkline(discordGuildId: string): Promise<number[]> {
+    const guild = await this.findGuildByDiscordId(discordGuildId);
+    if (!guild) {
+      throw new NotFoundException({
+        code: 'GUILD_NOT_FOUND',
+        message: 'Guild not found or access denied',
+      });
+    }
+    return Array(24).fill(0);
+  }
+
+  async updateSettings(
+    discordGuildId: string,
+    dto: {
+      serverName?: string;
+      serverDescription?: string;
+      language?: string;
+      timezone?: string;
+      botToken?: string;
+      dataRetentionDays?: number;
+      anonymizeUserData?: boolean;
+      shareAnalytics?: boolean;
+      allowPublicWidgets?: boolean;
+    },
+  ): Promise<GuildSettingsResponseDto> {
+    const guild = await this.findGuildByDiscordId(discordGuildId);
+    if (!guild) {
+      throw new NotFoundException({
+        code: 'GUILD_NOT_FOUND',
+        message: 'Guild not found or access denied',
+      });
+    }
+    const settings = await this.serverSettingsRepository.findOne({
+      where: { guildId: guild.id },
+    });
+    if (!settings) {
+      throw new NotFoundException({
+        code: 'GUILD_NOT_FOUND',
+        message: 'Guild not found or access denied',
+      });
+    }
+    if (dto.serverName !== undefined) settings.serverName = dto.serverName;
+    if (dto.serverDescription !== undefined)
+      settings.serverDescription = dto.serverDescription;
+    if (dto.language !== undefined) settings.language = dto.language;
+    if (dto.timezone !== undefined) settings.timezone = dto.timezone;
+    if (dto.dataRetentionDays !== undefined)
+      settings.dataRetentionDays = dto.dataRetentionDays;
+    if (dto.anonymizeUserData !== undefined)
+      settings.anonymizeUserData = dto.anonymizeUserData;
+    if (dto.shareAnalytics !== undefined)
+      settings.shareAnalytics = dto.shareAnalytics;
+    if (dto.allowPublicWidgets !== undefined)
+      settings.allowPublicWidgets = dto.allowPublicWidgets;
+    await this.serverSettingsRepository.save(settings);
+    if (dto.botToken !== undefined) {
+      await this.updateToken(discordGuildId, { botToken: dto.botToken });
+    }
+    return this.getSettings(discordGuildId);
+  }
 
   async getUserGuilds(userId: string): Promise<UserGuildDto[]> {
     const accessToken = await this.discordOAuth.getDiscordToken(userId);

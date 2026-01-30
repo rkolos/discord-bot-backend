@@ -38,6 +38,8 @@ export interface IDiscordConfig {
   clientId: string;
   clientSecret: string;
   oauthRedirectUri: string;
+  /** Base URL of frontend for OAuth success redirect (e.g. https://app.example.com) */
+  frontendBaseUrl?: string;
 }
 
 export interface IIngestorConfig {

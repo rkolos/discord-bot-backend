@@ -1,9 +1,17 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  Injectable,
+  UnauthorizedException,
+  HttpException,
+  HttpStatus,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { createHash, randomBytes } from 'node:crypto';
-import type { DiscordUserResponse } from './discord-oauth.service';
+import {
+  type DiscordUserResponse,
+  DiscordOAuthService,
+} from './discord-oauth.service';
 import {
   User,
   UserPlan,
@@ -11,6 +19,7 @@ import {
   RefreshToken,
 } from '@app/shared';
 import { SharedConfigService } from '@app/shared';
+import { PasswordService } from './password.service';
 
 const JWT_ACCESS_TTL_SECONDS = 900; // 15 min
 const REFRESH_TOKEN_TTL_DAYS = 7;
@@ -29,7 +38,85 @@ export class AuthService {
     private readonly refreshTokenRepository: Repository<RefreshToken>,
     private readonly jwtService: JwtService,
     private readonly sharedConfig: SharedConfigService,
+    private readonly passwordService: PasswordService,
+    private readonly discordOAuth: DiscordOAuthService,
   ) {}
+
+  async register(
+    fullName: string,
+    email: string,
+    password: string,
+  ): Promise<{ user: User; accessToken: string; refreshToken: string; expiresAt: Date }> {
+    const normalizedEmail = email.toLowerCase().trim();
+    const existing = await this.userRepository.findOne({
+      where: { email: normalizedEmail },
+    });
+    if (existing) {
+      throw new HttpException(
+        {
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: 'Validation failed',
+            details: { email: 'Email already exists' },
+          },
+        },
+        HttpStatus.UNPROCESSABLE_ENTITY,
+      );
+    }
+    const passwordHash = await this.passwordService.hash(password);
+    const user = this.userRepository.create({
+      username: fullName.trim(),
+      email: normalizedEmail,
+      passwordHash,
+      plan: UserPlan.FREE,
+      status: UserStatus.ACTIVE,
+    });
+    await this.userRepository.save(user);
+    const session = await this.createSession(user);
+    return { user, ...session };
+  }
+
+  async login(
+    email: string,
+    password: string,
+  ): Promise<{ user: User; accessToken: string; refreshToken: string; expiresAt: Date }> {
+    const normalizedEmail = email.toLowerCase().trim();
+    const user = await this.userRepository.findOne({
+      where: { email: normalizedEmail },
+    });
+    if (!user || !user.passwordHash) {
+      throw new UnauthorizedException({
+        code: 'INVALID_CREDENTIALS',
+        message: 'Invalid email or password',
+      });
+    }
+    if (user.status !== UserStatus.ACTIVE) {
+      throw new UnauthorizedException({
+        code: 'INVALID_CREDENTIALS',
+        message: 'Invalid email or password',
+      });
+    }
+    const valid = await this.passwordService.compare(password, user.passwordHash);
+    if (!valid) {
+      throw new UnauthorizedException({
+        code: 'INVALID_CREDENTIALS',
+        message: 'Invalid email or password',
+      });
+    }
+    const now = new Date();
+    user.lastLoginAt = now;
+    await this.userRepository.save(user);
+    const session = await this.createSession(user);
+    return { user, ...session };
+  }
+
+  async verifyDiscordToken(
+    discordAccessToken: string,
+  ): Promise<{ user: User; accessToken: string; refreshToken: string; expiresAt: Date }> {
+    const discordUser = await this.discordOAuth.getDiscordUser(discordAccessToken);
+    const user = await this.upsertUserFromDiscord(discordUser);
+    return this.createSession(user).then((session) => ({ user, ...session }));
+  }
 
   async upsertUserFromDiscord(
     discordUser: DiscordUserResponse,

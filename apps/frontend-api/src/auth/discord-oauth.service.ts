@@ -12,6 +12,10 @@ const STATE_REDIS_KEY_PREFIX = 'frontend-api:auth:discord:state:';
 const DISCORD_TOKEN_REDIS_KEY_PREFIX = 'frontend-api:auth:discord-token:';
 const STATE_TTL_SECONDS = 600;
 
+export interface DiscordStateData {
+  redirectUri: string | null;
+}
+
 export interface DiscordTokenResponse {
   access_token: string;
   token_type: string;
@@ -37,15 +41,15 @@ export class DiscordOAuthService {
     private readonly httpService: HttpService,
   ) {}
 
-  async buildLoginUrl(redirectUri?: string): Promise<{ state: string; url: string }> {
+  async buildLoginUrl(frontendRedirectUri?: string): Promise<{ state: string; url: string }> {
     const { clientId, oauthRedirectUri } = this.sharedConfig.discord;
-    const redirect = redirectUri ?? oauthRedirectUri;
     const state = randomBytes(32).toString('hex');
     const key = STATE_REDIS_KEY_PREFIX + state;
-    await this.redis.set(key, state, STATE_TTL_SECONDS);
+    const stateData: DiscordStateData = { redirectUri: frontendRedirectUri ?? null };
+    await this.redis.set(key, JSON.stringify(stateData), STATE_TTL_SECONDS);
     const params = new URLSearchParams({
       client_id: clientId,
-      redirect_uri: redirect,
+      redirect_uri: oauthRedirectUri,
       response_type: 'code',
       scope: SCOPES.join(' '),
       state,
@@ -54,12 +58,22 @@ export class DiscordOAuthService {
     return { state, url };
   }
 
+  async getStateDataAndConsume(state: string): Promise<DiscordStateData | null> {
+    const key = STATE_REDIS_KEY_PREFIX + state;
+    const stored = await this.redis.get(key);
+    await this.redis.del(key);
+    if (!stored) return null;
+    try {
+      return JSON.parse(stored) as DiscordStateData;
+    } catch {
+      return null;
+    }
+  }
+
   async validateState(state: string): Promise<boolean> {
     const key = STATE_REDIS_KEY_PREFIX + state;
     const stored = await this.redis.get(key);
-    if (stored !== state) {
-      return false;
-    }
+    if (!stored) return false;
     await this.redis.del(key);
     return true;
   }

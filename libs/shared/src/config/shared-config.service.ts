@@ -77,6 +77,8 @@ export class SharedConfigService {
       clientSecret: this.configService.get<string>('DISCORD_CLIENT_SECRET') ?? '',
       oauthRedirectUri:
         this.configService.get<string>('DISCORD_OAUTH_REDIRECT_URI') ?? '',
+      frontendBaseUrl:
+        this.configService.get<string>('FRONTEND_BASE_URL') ?? undefined,
     };
   }
 

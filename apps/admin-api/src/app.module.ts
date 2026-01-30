@@ -13,6 +13,11 @@ import { AdminAuthGuard } from './auth/admin-auth.guard';
 import { StatsModule } from './stats/stats.module';
 import { HealthModule } from './health/health.module';
 import { BotsModule } from './bots/bots.module';
+import { DashboardModule } from './dashboard/dashboard.module';
+import { UsersModule } from './users/users.module';
+import { AnalyticsModule } from './analytics/analytics.module';
+import { GuildsModule } from './guilds/guilds.module';
+import { SystemModule } from './system/system.module';
 
 @Module({
   imports: [
@@ -23,6 +28,11 @@ import { BotsModule } from './bots/bots.module';
     ThrottlerModule.forRoot([{ ttl: 60_000, limit: 100 }]),
     AuthModule,
     StatsModule,
+    DashboardModule,
+    UsersModule,
+    GuildsModule,
+    AnalyticsModule,
+    SystemModule,
     HealthModule,
     BotsModule,
   ],
