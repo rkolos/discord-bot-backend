@@ -26,7 +26,8 @@
     "migration:generate": "typeorm-ts-node-commonjs migration:generate -d libs/shared/src/database/data-source.ts",
     "migration:run": "typeorm-ts-node-commonjs migration:run -d libs/shared/src/database/data-source.ts",
     "migration:revert": "typeorm-ts-node-commonjs migration:revert -d libs/shared/src/database/data-source.ts",
-    "create-super-admin": "ts-node scripts/create-super-admin.ts"
+    "create-super-admin": "ts-node scripts/create-super-admin.ts",
+    "register-commands": "ts-node scripts/register-commands.ts"
   },
   "dependencies": {
     "@clickhouse/client": "^1.8.0",
@@ -46,6 +47,7 @@
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.1",
     "cookie-parser": "^1.4.6",
+    "discord.js": "^14.14.0",
     "ioredis": "^5.0.4",
     "joi": "^17.13.0",
     "passport": "^0.7.0",

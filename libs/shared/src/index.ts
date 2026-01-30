@@ -1,8 +1,10 @@
+export * from './analytics';
 export * from './anonymization.util';
 export * from './clickhouse';
 export * from './config';
 export * from './crypto';
 export * from './database/database.module';
+export { AppDataSource } from './database/data-source';
 export * from './database/entities';
 export * from './filters';
 export * from './pipes';

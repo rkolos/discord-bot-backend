@@ -12,6 +12,7 @@ import { AuthModule } from './auth/auth.module';
 import { AdminAuthGuard } from './auth/admin-auth.guard';
 import { StatsModule } from './stats/stats.module';
 import { HealthModule } from './health/health.module';
+import { BotsModule } from './bots/bots.module';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { HealthModule } from './health/health.module';
     AuthModule,
     StatsModule,
     HealthModule,
+    BotsModule,
   ],
   controllers: [TestValidationController],
   providers: [

@@ -14,7 +14,9 @@ describe('ClickHouse Ingestor integration (batch insert)', () => {
   beforeAll(async () => {
     const started = await new ClickHouseContainer(
       'clickhouse/clickhouse-server:22-alpine',
-    ).start();
+    )
+      .withStartupTimeout(180_000)
+      .start();
     container = started;
 
     const opts = started.getClientOptions();
@@ -45,7 +47,7 @@ describe('ClickHouse Ingestor integration (batch insert)', () => {
     await (
       clickhouse as unknown as { onModuleInit: () => Promise<void> }
     ).onModuleInit();
-  }, 90_000);
+  }, 180_000);
 
   afterAll(async () => {
     if (container) await container.stop();

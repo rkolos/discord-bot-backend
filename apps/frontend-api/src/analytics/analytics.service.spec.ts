@@ -1,49 +1,43 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
-import { ClickHouseService } from '@app/shared';
-import { SharedConfigService } from '@app/shared';
 import { GuildSubscriptionTier } from '@app/shared';
+import { SharedAnalyticsService } from '@app/shared';
 import { GuildsService } from '../guilds/guilds.service';
 import { AnalyticsService } from './analytics.service';
 
 describe('AnalyticsService', () => {
   let service: AnalyticsService;
-  let clickhouse: jest.Mocked<Pick<ClickHouseService, 'query'>>;
+  let sharedAnalytics: jest.Mocked<Pick<SharedAnalyticsService, 'getOverviewByGuildId' | 'getActivityChartByGuildId' | 'getTopMembersByGuildId'>>;
   let guildsService: jest.Mocked<Pick<GuildsService, 'findGuildByDiscordId'>>;
 
   const guildId = 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11';
   const discordGuildId = '111222333444555666';
 
   beforeEach(async () => {
-    const mockQuery = jest.fn().mockResolvedValue({
-      json: async () => [{ today: '2025-01-15' }, { total: 100 }, { cnt: 5 }, { cnt: 12 }],
-    });
-    const mockClickhouse = {
-      query: mockQuery,
+    const mockSharedAnalytics = {
+      getOverviewByGuildId: jest.fn(),
+      getActivityChartByGuildId: jest.fn(),
+      getTopMembersByGuildId: jest.fn(),
     };
     const mockGuildsService = {
       findGuildByDiscordId: jest.fn(),
-    };
-    const mockSharedConfig = {
-      clickhouse: { database: 'default' },
     };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AnalyticsService,
-        { provide: ClickHouseService, useValue: mockClickhouse },
-        { provide: SharedConfigService, useValue: mockSharedConfig },
+        { provide: SharedAnalyticsService, useValue: mockSharedAnalytics },
         { provide: GuildsService, useValue: mockGuildsService },
       ],
     }).compile();
 
     service = module.get(AnalyticsService);
-    clickhouse = module.get(ClickHouseService);
+    sharedAnalytics = module.get(SharedAnalyticsService);
     guildsService = module.get(GuildsService);
   });
 
-  describe('SQL parameterization', () => {
-    it('getActivityChart passes from and to only via query_params', async () => {
+  describe('delegation to SharedAnalyticsService', () => {
+    it('getActivityChart calls sharedAnalytics with guild id and date range', async () => {
       const from = '2025-01-01';
       const to = '2025-01-31';
       (guildsService.findGuildByDiscordId as jest.Mock).mockResolvedValue({
@@ -51,44 +45,54 @@ describe('AnalyticsService', () => {
         discordGuildId,
         subscriptionTier: GuildSubscriptionTier.PRO,
       });
-      (clickhouse.query as jest.Mock).mockResolvedValue({
-        json: async () => [
-          { date: '2025-01-01', messages: 10, members: 3, voiceMinutes: 0 },
-        ],
-      });
+      (sharedAnalytics.getActivityChartByGuildId as jest.Mock).mockResolvedValue([
+        { date: '2025-01-01', messages: 10, members: 3, voiceMinutes: 0 },
+      ]);
 
       await service.getActivityChart(discordGuildId, from, to);
 
-      const call = (clickhouse.query as jest.Mock).mock.calls.find(
-        (c: unknown[]) => (c[0] as { query: string }).query?.includes('mv_daily_activity'),
+      expect(sharedAnalytics.getActivityChartByGuildId).toHaveBeenCalledWith(
+        guildId,
+        from,
+        to,
       );
-      expect(call).toBeDefined();
-      const params = call[0].query_params;
-      expect(params).toBeDefined();
-      expect(params.from).toBe(from);
-      expect(params.to).toBe(to);
-      expect(params.guildId).toBe(guildId);
-      expect(call[0].query).not.toContain(from);
-      expect(call[0].query).not.toContain(to);
     });
 
-    it('getTopMembers passes limit only via query_params', async () => {
+    it('getTopMembers calls sharedAnalytics with guild id, sortBy and limit', async () => {
       (guildsService.findGuildByDiscordId as jest.Mock).mockResolvedValue({
         id: guildId,
         discordGuildId,
       });
-      (clickhouse.query as jest.Mock).mockResolvedValue({
-        json: async () => [],
-      });
+      (sharedAnalytics.getTopMembersByGuildId as jest.Mock).mockResolvedValue([]);
 
       await service.getTopMembers(discordGuildId, 'messages', 20);
 
-      const call = (clickhouse.query as jest.Mock).mock.calls.find(
-        (c: unknown[]) => (c[0] as { query: string }).query?.includes('mv_top_members'),
+      expect(sharedAnalytics.getTopMembersByGuildId).toHaveBeenCalledWith(
+        guildId,
+        'messages',
+        20,
       );
-      expect(call).toBeDefined();
-      expect(call[0].query_params?.limit).toBe(20);
-      expect(call[0].query_params?.guildId).toBe(guildId);
+    });
+
+    it('getOverview calls sharedAnalytics with guild id', async () => {
+      (guildsService.findGuildByDiscordId as jest.Mock).mockResolvedValue({
+        id: guildId,
+        discordGuildId,
+      });
+      (sharedAnalytics.getOverviewByGuildId as jest.Mock).mockResolvedValue({
+        totalMessages: 100,
+        activeMembers24h: 5,
+        activeMembers7d: 12,
+      });
+
+      const result = await service.getOverview(discordGuildId);
+
+      expect(sharedAnalytics.getOverviewByGuildId).toHaveBeenCalledWith(guildId);
+      expect(result).toEqual({
+        totalMessages: 100,
+        activeMembers24h: 5,
+        activeMembers7d: 12,
+      });
     });
   });
 
@@ -112,6 +116,7 @@ describe('AnalyticsService', () => {
           message: expect.stringContaining('365'),
         },
       });
+      expect(sharedAnalytics.getActivityChartByGuildId).not.toHaveBeenCalled();
     });
 
     it('allows Free plan when range is 365 days or less', async () => {
@@ -120,13 +125,16 @@ describe('AnalyticsService', () => {
         discordGuildId,
         subscriptionTier: GuildSubscriptionTier.FREE,
       });
-      (clickhouse.query as jest.Mock).mockResolvedValue({
-        json: async () => [],
-      });
+      (sharedAnalytics.getActivityChartByGuildId as jest.Mock).mockResolvedValue([]);
 
       await expect(
         service.getActivityChart(discordGuildId, '2024-01-01', '2024-12-31'),
       ).resolves.toEqual([]);
+      expect(sharedAnalytics.getActivityChartByGuildId).toHaveBeenCalledWith(
+        guildId,
+        '2024-01-01',
+        '2024-12-31',
+      );
     });
   });
 
@@ -138,6 +146,7 @@ describe('AnalyticsService', () => {
       await expect(service.getOverview(discordGuildId)).rejects.toMatchObject({
         response: { code: 'GUILD_NOT_FOUND' },
       });
+      expect(sharedAnalytics.getOverviewByGuildId).not.toHaveBeenCalled();
     });
   });
 
@@ -157,6 +166,7 @@ describe('AnalyticsService', () => {
       ).rejects.toMatchObject({
         response: { code: 'INVALID_DATE_RANGE' },
       });
+      expect(sharedAnalytics.getActivityChartByGuildId).not.toHaveBeenCalled();
     });
   });
 });
