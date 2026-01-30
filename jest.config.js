@@ -9,7 +9,12 @@ module.exports = {
     '**/*.performance-spec.ts',
   ],
   // Colima: DOCKER_HOST для интеграционных тестов (Testcontainers)
-  setupFiles: ['<rootDir>/scripts/jest-e2e-colima-setup.js'],
+  setupFiles: [
+    '<rootDir>/scripts/jest-e2e-colima-setup.js',
+    '<rootDir>/scripts/jest-redis-setup.js',
+  ],
+  globalSetup: '<rootDir>/scripts/jest-redis-global-setup.js',
+  globalTeardown: '<rootDir>/scripts/jest-redis-global-teardown.js',
   moduleNameMapper: {
     '^@app/shared$': '<rootDir>/libs/shared/src',
     '^@app/shared/(.*)$': '<rootDir>/libs/shared/src/$1',

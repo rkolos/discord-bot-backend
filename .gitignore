@@ -25,6 +25,7 @@ npm-debug.log*
 # Test and coverage
 coverage/
 .nyc_output/
+.jest-redis-env.json
 
 # Optional
 *.pid
