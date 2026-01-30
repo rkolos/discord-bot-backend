@@ -122,31 +122,43 @@ export class AuthService {
     discordUser: DiscordUserResponse,
   ): Promise<User> {
     const discordId = discordUser.id;
-    const existing = await this.userRepository.findOne({
-      where: { discordId },
-    });
     const avatarUrl = buildAvatarUrl(discordUser.id, discordUser.avatar);
     const now = new Date();
-    if (existing) {
-      existing.username = discordUser.username;
-      existing.email = discordUser.email ?? existing.email;
-      existing.avatarUrl = avatarUrl ?? existing.avatarUrl;
-      existing.discriminator = discordUser.discriminator ?? existing.discriminator;
-      existing.lastLoginAt = now;
-      await this.userRepository.save(existing);
-      return existing;
-    }
-    const user = this.userRepository.create({
-      discordId,
-      username: discordUser.username,
-      discriminator: discordUser.discriminator ?? null,
-      avatarUrl,
-      email: discordUser.email ?? null,
-      plan: UserPlan.FREE,
-      status: UserStatus.ACTIVE,
-      lastLoginAt: now,
+    await this.userRepository
+      .createQueryBuilder()
+      .insert()
+      .into(User)
+      .values({
+        discordId,
+        username: discordUser.username,
+        discriminator: discordUser.discriminator ?? null,
+        avatarUrl,
+        email: discordUser.email ?? null,
+        plan: UserPlan.FREE,
+        status: UserStatus.ACTIVE,
+        lastLoginAt: now,
+      })
+      .orUpdate(
+        ['username', 'discriminator', 'avatarUrl', 'email', 'lastLoginAt'],
+        ['discordId'],
+        { skipUpdateIfNoValuesChanged: true },
+      )
+      .execute();
+    const user = await this.userRepository.findOne({
+      where: { discordId },
     });
-    await this.userRepository.save(user);
+    if (!user) {
+      throw new HttpException(
+        {
+          error: {
+            code: 'INTERNAL_ERROR',
+            message: 'User upsert failed',
+            details: {},
+          },
+        },
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
     return user;
   }
 
