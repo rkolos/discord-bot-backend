@@ -7,12 +7,15 @@ import {
   Res,
   UseGuards,
 } from '@nestjs/common';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Response } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { User } from '@app/shared';
 import { UserDataService } from './user-data.service';
 
+@ApiTags('User Data')
+@ApiBearerAuth()
 @Controller('users/me')
 @UseGuards(JwtAuthGuard)
 export class UserDataController {
@@ -20,11 +23,21 @@ export class UserDataController {
 
   @Delete('data')
   @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({
+    summary: 'Delete all my data',
+    description:
+      'Deletes all user data (GDPR). Requires Bearer JWT.',
+  })
   async deleteAllData(@CurrentUser() user: User): Promise<void> {
     await this.userDataService.deleteAllUserData(user);
   }
 
   @Get('data/export')
+  @ApiOperation({
+    summary: 'Export my data',
+    description:
+      'Returns user data as JSON download (GDPR data export). Requires Bearer JWT.',
+  })
   async exportData(
     @CurrentUser() user: User,
     @Res({ passthrough: false }) res: Response,

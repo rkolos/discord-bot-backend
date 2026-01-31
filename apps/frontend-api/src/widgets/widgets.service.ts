@@ -88,12 +88,15 @@ export class WidgetsService {
     const baseUrl = process.env.FRONTEND_API_URL ?? 'https://api.example.com';
     const embedUrl = `${baseUrl}/widgets/embed/${guild.discordGuildId}`;
     const embedCode = `<iframe src="${embedUrl}" width="400" height="200"></iframe>`;
+    const now = new Date();
     const widget = this.widgetRepository.create({
       guildId: guild.id,
       name,
       config: (config ?? {}) as Record<string, unknown>,
       embedUrl,
       embedCode,
+      createdAt: now,
+      updatedAt: now,
     });
     const saved = await this.widgetRepository.save(widget);
     return this.toResponse(saved);

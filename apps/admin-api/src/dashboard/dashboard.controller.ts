@@ -1,13 +1,20 @@
 import { Controller, Get, UseGuards } from '@nestjs/common';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { AdminAuthGuard } from '../auth/admin-auth.guard';
 import { DashboardService } from './dashboard.service';
 
+@ApiTags('Dashboard')
+@ApiBearerAuth()
 @Controller('dashboard')
 @UseGuards(AdminAuthGuard)
 export class DashboardController {
   constructor(private readonly dashboardService: DashboardService) {}
 
   @Get('overview')
+  @ApiOperation({
+    summary: 'Dashboard overview',
+    description: 'Returns active users, guilds, counters, MRR, growth data, feature leaderboard, system status. Admin JWT.',
+  })
   async getOverview(): Promise<{
     data: {
       activeUsers: { current: number; trend: number };

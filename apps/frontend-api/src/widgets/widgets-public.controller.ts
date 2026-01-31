@@ -1,12 +1,19 @@
 import { Controller, Get, Param } from '@nestjs/common';
+import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { WidgetsService } from './widgets.service';
 import { WidgetIdParamDto } from './dto/widget-id-param.dto';
 
+@ApiTags('Widgets (Public)')
 @Controller('widgets')
 export class WidgetsPublicController {
   constructor(private readonly widgetsService: WidgetsService) {}
 
   @Get(':widgetId')
+  @ApiOperation({
+    summary: 'Get widget by ID (public)',
+    description:
+      'Returns widget by ID for embedding. No auth required.',
+  })
   async getWidgetById(
     @Param() params: WidgetIdParamDto,
   ): Promise<{

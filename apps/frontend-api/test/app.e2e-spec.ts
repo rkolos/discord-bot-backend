@@ -108,7 +108,7 @@ describe('Frontend API E2E (validation contract)', () => {
     }).compile();
 
     const nestApp = moduleFixture.createNestApplication();
-    nestApp.setGlobalPrefix('api');
+    nestApp.setGlobalPrefix('api', { exclude: ['health'] });
     const httpAdapterHost = nestApp.get(HttpAdapterHost);
     nestApp.useGlobalFilters(new AllExceptionsFilter(httpAdapterHost));
     nestApp.useGlobalPipes(
@@ -119,6 +119,11 @@ describe('Frontend API E2E (validation contract)', () => {
         exceptionFactory: (errors: unknown) => new BadRequestException(errors),
       }),
     );
+    const swaggerDoc = SwaggerModule.createDocument(
+      nestApp,
+      new DocumentBuilder().setTitle('Frontend API').setVersion('1').build(),
+    );
+    SwaggerModule.setup('api/docs', nestApp, swaggerDoc);
     await nestApp.init();
     app = nestApp;
   }, 120_000);
@@ -126,9 +131,18 @@ describe('Frontend API E2E (validation contract)', () => {
   afterAll(async () => {
     await app?.close();
     if (ds?.isInitialized) await ds.destroy();
+    await chContainer?.stop();
     await redisContainer?.stop();
     await pgContainer?.stop();
   }, 30_000);
+
+  it('GET /api/docs returns 200 and Swagger UI HTML', async () => {
+    const res = await request(app.getHttpServer())
+      .get('/api/docs')
+      .expect(200);
+    expect(res.headers['content-type']).toMatch(/text\/html/);
+    expect(res.text).toContain('swagger');
+  });
 
   it('POST /api/test-validation returns VALIDATION_ERROR and envelope with details for invalid body', async () => {
     const res = await request(app.getHttpServer())

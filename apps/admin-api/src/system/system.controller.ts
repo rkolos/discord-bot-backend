@@ -7,15 +7,22 @@ import {
   Body,
   ParseIntPipe,
 } from '@nestjs/common';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { SystemService } from './system.service';
 import { MaintenanceModeDto } from './dto/maintenance-mode.dto';
 import { SystemLogsQueryDto } from './dto/system-logs-query.dto';
 
+@ApiTags('System')
+@ApiBearerAuth()
 @Controller('system')
 export class SystemController {
   constructor(private readonly systemService: SystemService) {}
 
   @Get('health/summary')
+  @ApiOperation({
+    summary: 'Health summary',
+    description: 'Returns api, gateway, database, queues status. Admin JWT.',
+  })
   async getHealthSummary(): Promise<{
     data: { api: string; gateway: string; database: string; queues: string };
   }> {
@@ -24,6 +31,10 @@ export class SystemController {
   }
 
   @Get('shards')
+  @ApiOperation({
+    summary: 'List shards',
+    description: 'Returns shard status, ping, guild count, uptime. Admin JWT.',
+  })
   async getShards(): Promise<{
     data: Array<{
       id: number;
@@ -38,6 +49,10 @@ export class SystemController {
   }
 
   @Post('shards/:id/restart')
+  @ApiOperation({
+    summary: 'Restart shard',
+    description: 'Restarts a gateway shard by id. Admin JWT.',
+  })
   async restartShard(
     @Param('id', ParseIntPipe) id: number,
   ): Promise<{ data: { success: boolean } }> {
@@ -46,6 +61,10 @@ export class SystemController {
   }
 
   @Post('guilds/:id/sync')
+  @ApiOperation({
+    summary: 'Sync guild',
+    description: 'Triggers guild data sync. Admin JWT.',
+  })
   async syncGuild(
     @Param('id') id: string,
   ): Promise<{ data: { success: boolean; syncedAt: string } }> {
@@ -54,6 +73,10 @@ export class SystemController {
   }
 
   @Get('queues')
+  @ApiOperation({
+    summary: 'List queues',
+    description: 'Returns BullMQ queue stats (active, waiting, delayed, failed). Admin JWT.',
+  })
   async getQueues(): Promise<{
     data: Array<{
       queueName: string;
@@ -69,6 +92,10 @@ export class SystemController {
   }
 
   @Get('queues/stalled')
+  @ApiOperation({
+    summary: 'Stalled jobs',
+    description: 'Returns stalled jobs. Query: queueName. Admin JWT.',
+  })
   async getStalledJobs(
     @Query('queueName') queueName?: string,
   ): Promise<{
@@ -85,6 +112,10 @@ export class SystemController {
   }
 
   @Post('queues/:name/retry-failed')
+  @ApiOperation({
+    summary: 'Retry failed jobs',
+    description: 'Retries failed jobs in a queue. Admin JWT.',
+  })
   async retryFailed(
     @Param('name') name: string,
   ): Promise<{ data: { success: boolean; retriedCount: number } }> {
@@ -93,6 +124,10 @@ export class SystemController {
   }
 
   @Post('maintenance/mode')
+  @ApiOperation({
+    summary: 'Set maintenance mode',
+    description: 'Enables or disables maintenance mode. Body: enabled. Admin JWT.',
+  })
   async setMaintenanceMode(
     @Body() dto: MaintenanceModeDto,
   ): Promise<{ data: { maintenanceMode: boolean } }> {
@@ -101,6 +136,10 @@ export class SystemController {
   }
 
   @Post('cleanup/orphans')
+  @ApiOperation({
+    summary: 'Cleanup orphans',
+    description: 'Removes orphan counters, widgets, jobs. Admin JWT.',
+  })
   async cleanupOrphans(): Promise<{
     data: {
       success: boolean;
@@ -114,6 +153,10 @@ export class SystemController {
   }
 
   @Get('logs')
+  @ApiOperation({
+    summary: 'System logs',
+    description: 'Returns paginated system logs. Query: limit, cursor, level, service. Admin JWT.',
+  })
   async getLogs(
     @Query() query: SystemLogsQueryDto,
   ): Promise<{

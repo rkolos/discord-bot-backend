@@ -8,9 +8,9 @@ module.exports = {
     '**/*.integration-spec.ts',
     '**/*.performance-spec.ts',
   ],
-  // Colima: DOCKER_HOST для интеграционных тестов (Testcontainers)
+  // Docker: setup для интеграционных тестов (Testcontainers)
   setupFiles: [
-    '<rootDir>/scripts/jest-e2e-colima-setup.js',
+    '<rootDir>/scripts/jest-e2e-docker-setup.js',
     '<rootDir>/scripts/jest-redis-setup.js',
   ],
   globalSetup: '<rootDir>/scripts/jest-redis-global-setup.js',

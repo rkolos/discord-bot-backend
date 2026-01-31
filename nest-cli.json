@@ -14,7 +14,10 @@
       "entryFile": "main",
       "sourceRoot": "apps/frontend-api/src",
       "compilerOptions": {
-        "tsConfigPath": "apps/frontend-api/tsconfig.app.json"
+        "tsConfigPath": "apps/frontend-api/tsconfig.app.json",
+        "plugins": [
+          { "name": "@nestjs/swagger", "options": { "classValidatorShim": true } }
+        ]
       }
     },
     "admin-api": {
@@ -23,7 +26,10 @@
       "entryFile": "main",
       "sourceRoot": "apps/admin-api/src",
       "compilerOptions": {
-        "tsConfigPath": "apps/admin-api/tsconfig.app.json"
+        "tsConfigPath": "apps/admin-api/tsconfig.app.json",
+        "plugins": [
+          { "name": "@nestjs/swagger", "options": { "classValidatorShim": true } }
+        ]
       }
     },
     "bot-service": {

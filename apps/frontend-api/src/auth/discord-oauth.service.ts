@@ -1,4 +1,9 @@
-import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  HttpException,
+  HttpStatus,
+  Injectable,
+} from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
 import { randomBytes } from 'node:crypto';
@@ -42,7 +47,33 @@ export class DiscordOAuthService {
   ) {}
 
   async buildLoginUrl(frontendRedirectUri?: string): Promise<{ state: string; url: string }> {
-    const { clientId, oauthRedirectUri } = this.sharedConfig.discord;
+    const { clientId, oauthRedirectUri, frontendBaseUrl } =
+      this.sharedConfig.discord;
+    if (frontendRedirectUri != null && frontendBaseUrl != null) {
+      try {
+        const parsed = new URL(frontendRedirectUri);
+        const allowedBase = new URL(frontendBaseUrl);
+        const expectedPath = '/login/callback';
+        const normalizedPath = parsed.pathname.replace(/\/$/, '') || '/';
+        if (
+          parsed.origin !== allowedBase.origin ||
+          normalizedPath !== expectedPath
+        ) {
+          throw new BadRequestException({
+            code: 'VALIDATION_ERROR',
+            message: 'redirect_uri must be {FRONTEND_BASE_URL}/login/callback',
+            details: { redirect_uri: 'Invalid redirect_uri' },
+          });
+        }
+      } catch (err) {
+        if (err instanceof BadRequestException) throw err;
+        throw new BadRequestException({
+          code: 'VALIDATION_ERROR',
+          message: 'redirect_uri must be a valid URL',
+          details: { redirect_uri: 'Invalid redirect_uri' },
+        });
+      }
+    }
     const state = randomBytes(32).toString('hex');
     const key = STATE_REDIS_KEY_PREFIX + state;
     const stateData: DiscordStateData = { redirectUri: frontendRedirectUri ?? null };

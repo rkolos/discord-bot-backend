@@ -1,11 +1,18 @@
 import { Controller, Get, Param } from '@nestjs/common';
+import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { PublicService } from './public.service';
 
+@ApiTags('Public')
 @Controller()
 export class PublicController {
   constructor(private readonly publicService: PublicService) {}
 
   @Get('features')
+  @ApiOperation({
+    summary: 'List product features',
+    description:
+      'Returns the list of product features (counters, analytics, widgets, etc.) for landing or docs. No auth required.',
+  })
   async getFeatures(): Promise<{
     data: Array<{
       id: string;
@@ -20,6 +27,11 @@ export class PublicController {
   }
 
   @Get('pricing')
+  @ApiOperation({
+    summary: 'List pricing plans',
+    description:
+      'Returns pricing tiers (free, pro, etc.) with price, features, CTA. Use for pricing page. No auth required.',
+  })
   async getPricing(): Promise<{
     data: Array<{
       id: string;
@@ -37,6 +49,11 @@ export class PublicController {
   }
 
   @Get('social-proof')
+  @ApiOperation({
+    summary: 'Social proof entries',
+    description:
+      'Returns testimonials or social proof items for landing. No auth required.',
+  })
   async getSocialProof(): Promise<{
     data: Array<{
       id: string;
@@ -50,6 +67,11 @@ export class PublicController {
   }
 
   @Get('docs/categories')
+  @ApiOperation({
+    summary: 'Documentation categories',
+    description:
+      'Returns docs categories with articles (id, title, slug, excerpt). Use to build docs navigation. No auth required.',
+  })
   async getDocCategories(): Promise<{
     data: Array<{
       id: string;
@@ -71,6 +93,11 @@ export class PublicController {
   }
 
   @Get('docs/:slug')
+  @ApiOperation({
+    summary: 'Get documentation article by slug',
+    description:
+      'Returns a single docs article by slug (title, content, excerpt, updatedAt). No auth required.',
+  })
   async getDocArticle(
     @Param('slug') slug: string,
   ): Promise<{

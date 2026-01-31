@@ -1,23 +1,10 @@
 /**
  * Jest globalSetup: проверяет доступность Redis; при отсутствии поднимает контейнер.
  * Пишет .jest-redis-env.json с REDIS_HOST, REDIS_PORT и флагом JEST_REDIS_STARTED_BY_US.
+ * Требуется Docker для Testcontainers.
  */
 const path = require('path');
 const fs = require('fs');
-
-// Colima/Docker: globalSetup выполняется в отдельном процессе, нужен DOCKER_HOST для Testcontainers
-const home = process.env.HOME || process.env.USERPROFILE;
-if (home && !process.env.DOCKER_HOST) {
-  const colimaDefault = path.join(home, '.colima', 'default', 'docker.sock');
-  const colimaRoot = path.join(home, '.colima', 'docker.sock');
-  if (fs.existsSync(colimaDefault)) {
-    process.env.DOCKER_HOST = `unix://${colimaDefault}`;
-    process.env.TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE = '/var/run/docker.sock';
-  } else if (fs.existsSync(colimaRoot)) {
-    process.env.DOCKER_HOST = `unix://${colimaRoot}`;
-    process.env.TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE = '/var/run/docker.sock';
-  }
-}
 
 const ENV_FILE = path.join(__dirname, '..', '.jest-redis-env.json');
 const CONNECT_TIMEOUT_MS = 3000;

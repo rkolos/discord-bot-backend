@@ -13,6 +13,7 @@ import {
   UseGuards,
   HttpException,
 } from '@nestjs/common';
+import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Request, Response } from 'express';
 import { AuthService } from './auth.service';
 import { DiscordOAuthService } from './discord-oauth.service';
@@ -32,6 +33,7 @@ const COOKIE_PATH = '/api/auth/refresh';
 const COOKIE_MAX_AGE_DAYS = 7;
 const COOKIE_MAX_AGE_SECONDS = COOKIE_MAX_AGE_DAYS * 24 * 60 * 60;
 
+@ApiTags('Auth')
 @Controller('auth')
 export class AuthController {
   constructor(
@@ -41,6 +43,11 @@ export class AuthController {
   ) {}
 
   @Get('discord')
+  @ApiOperation({
+    summary: 'Redirect to Discord OAuth',
+    description:
+      'Redirects the user to Discord OAuth consent page. Use when starting Discord login flow. Returns 302 redirect.',
+  })
   async discordInitiate(
     @Query('redirect_uri') redirectUriFromQuery: string | undefined,
     @Res() res: Response,
@@ -50,20 +57,40 @@ export class AuthController {
   }
 
   @Get('discord/login')
+  @ApiOperation({
+    summary: 'Redirect to Discord OAuth',
+    description:
+      'Redirects the user to Discord OAuth consent page. Use when starting Discord login flow. Requires redirect_uri (frontend callback, e.g. {origin}/login/callback). Returns 302 redirect.',
+  })
   async discordLogin(
-    @Query('redirect_uri') redirectUriFromQuery?: string,
-  ): Promise<{ url: string }> {
+    @Query('redirect_uri') redirectUriFromQuery: string | undefined,
+    @Res() res: Response,
+  ): Promise<void> {
     const { url } = await this.discordOAuth.buildLoginUrl(redirectUriFromQuery);
-    return { url };
+    res.redirect(302, url);
   }
 
   @Get('discord/callback')
+  @ApiOperation({
+    summary: 'Discord OAuth callback (GET)',
+    description:
+      'Handles redirect from Discord after user authorizes. Exchanges code for tokens, creates/updates user, sets cookies and redirects. Called by Discord; do not call directly unless simulating OAuth flow.',
+  })
   async discordCallbackGet(
     @Query('code') code: string | undefined,
     @Query('state') state: string | undefined,
     @Res() res: Response,
   ): Promise<void> {
+    const errorRedirectUrl =
+      this.sharedConfig.discord.frontendBaseUrl != null
+        ? `${this.sharedConfig.discord.frontendBaseUrl}/login/callback?error=OAUTH_FAILED`
+        : null;
+
     if (!code || !state) {
+      if (errorRedirectUrl) {
+        res.redirect(302, errorRedirectUrl);
+        return;
+      }
       throw new HttpException(
         {
           code: 'OAUTH_FAILED',
@@ -75,6 +102,10 @@ export class AuthController {
     const stateData =
       await this.discordOAuth.getStateDataAndConsume(state);
     if (!stateData) {
+      if (errorRedirectUrl) {
+        res.redirect(302, errorRedirectUrl);
+        return;
+      }
       throw new HttpException(
         {
           code: 'OAUTH_FAILED',
@@ -111,12 +142,22 @@ export class AuthController {
       });
       const frontendRedirect =
         stateData.redirectUri ??
-        (this.sharedConfig.discord.frontendBaseUrl
-          ? `${this.sharedConfig.discord.frontendBaseUrl}/dashboard`
-          : '/dashboard');
+        (this.sharedConfig.discord.frontendBaseUrl != null
+          ? `${this.sharedConfig.discord.frontendBaseUrl}/login/callback`
+          : '/login/callback');
       const separator = frontendRedirect.includes('?') ? '&' : '?';
       res.redirect(302, `${frontendRedirect}${separator}token=${accessToken}`);
     } catch {
+      const targetUrl =
+        stateData.redirectUri ??
+        (this.sharedConfig.discord.frontendBaseUrl != null
+          ? `${this.sharedConfig.discord.frontendBaseUrl}/login/callback`
+          : null);
+      if (targetUrl) {
+        const separator = targetUrl.includes('?') ? '&' : '?';
+        res.redirect(302, `${targetUrl}${separator}error=OAUTH_FAILED`);
+        return;
+      }
       throw new HttpException(
         {
           code: 'OAUTH_FAILED',
@@ -129,6 +170,11 @@ export class AuthController {
 
   @Post('discord/verify')
   @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Verify Discord token and get JWT',
+    description:
+      'Exchanges a Discord OAuth token for a platform JWT and user info. Use after user returns from Discord OAuth with a token; returns accessToken and user for authenticated API calls.',
+  })
   async discordVerify(
     @Body() dto: DiscordVerifyDto,
   ): Promise<{
@@ -154,6 +200,11 @@ export class AuthController {
 
   @Post('register')
   @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({
+    summary: 'Register new user',
+    description:
+      'Creates a new user account with email and password. Returns JWT access token and user; sets refresh token in cookie. Use for sign-up flow.',
+  })
   async register(
     @Body() dto: RegisterDto,
     @Res({ passthrough: true }) res: Response,
@@ -189,6 +240,11 @@ export class AuthController {
 
   @Post('login')
   @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Login with email and password',
+    description:
+      'Authenticates user by email and password. Returns JWT access token and user; sets refresh token in cookie. Use for sign-in; then use the token in Authorization header for protected endpoints.',
+  })
   async login(
     @Body() dto: LoginDto,
     @Res({ passthrough: true }) res: Response,
@@ -224,6 +280,11 @@ export class AuthController {
 
   @Post('discord/callback')
   @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Discord OAuth callback (POST)',
+    description:
+      'Exchanges Discord OAuth code for platform session. Body: code, state. Use when client received code from Discord redirect; returns JWT and user, sets refresh cookie.',
+  })
   async discordCallback(
     @Body() dto: DiscordCallbackDto,
     @Res({ passthrough: true }) res: Response,
@@ -278,6 +339,11 @@ export class AuthController {
 
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Refresh access token',
+    description:
+      'Issues a new access token using the refresh token from cookie. Use when access token expires; returns new accessToken, updates refresh cookie.',
+  })
   async refresh(
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
@@ -306,6 +372,11 @@ export class AuthController {
   @Post('logout')
   @HttpCode(HttpStatus.OK)
   @UseGuards(JwtAuthGuard)
+  @ApiOperation({
+    summary: 'Logout current user',
+    description:
+      'Invalidates the current session and Discord token. Requires Bearer JWT. Use when user signs out; clears server-side session and refresh cookie.',
+  })
   async logout(
     @CurrentUser() user: User,
     @Req() req: Request,

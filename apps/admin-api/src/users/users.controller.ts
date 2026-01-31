@@ -9,18 +9,25 @@ import {
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { AdminAuthGuard } from '../auth/admin-auth.guard';
 import { UsersService } from './users.service';
 import { UsersQueryDto } from './dto/users-query.dto';
 import { UserIdParamDto } from './dto/user-id-param.dto';
 import { BanUserDto } from './dto/ban-user.dto';
 
+@ApiTags('Users')
+@ApiBearerAuth()
 @Controller('users')
 @UseGuards(AdminAuthGuard)
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
   @Get()
+  @ApiOperation({
+    summary: 'List users',
+    description: 'Returns paginated users with filters (search, status, plan, sortBy, sortOrder). Admin JWT.',
+  })
   async getUsers(
     @Query() query: UsersQueryDto,
   ): Promise<{
@@ -51,6 +58,10 @@ export class UsersController {
   }
 
   @Get(':id')
+  @ApiOperation({
+    summary: 'Get user by ID',
+    description: 'Returns user details, activity log, owned guilds. Admin JWT.',
+  })
   async getUserById(
     @Param() params: UserIdParamDto,
   ): Promise<{
@@ -94,6 +105,10 @@ export class UsersController {
 
   @Post(':id/ban')
   @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Ban user',
+    description: 'Bans user. Body: reason. Admin JWT.',
+  })
   async banUser(
     @Param() params: UserIdParamDto,
     @Body() dto: BanUserDto,
@@ -104,6 +119,10 @@ export class UsersController {
 
   @Post(':id/unban')
   @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Unban user',
+    description: 'Removes ban. Admin JWT.',
+  })
   async unbanUser(
     @Param() params: UserIdParamDto,
   ): Promise<{ data: { success: true } }> {
@@ -113,6 +132,10 @@ export class UsersController {
 
   @Post(':id/impersonate')
   @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Impersonate user',
+    description: 'Returns JWT token for acting as user. Admin JWT.',
+  })
   async impersonate(
     @Param() params: UserIdParamDto,
   ): Promise<{ data: { token: string } }> {
@@ -121,6 +144,10 @@ export class UsersController {
   }
 
   @Get(':id/billing')
+  @ApiOperation({
+    summary: 'User billing',
+    description: 'Returns user transactions. Query: page, limit. Admin JWT.',
+  })
   async getBilling(
     @Param() params: UserIdParamDto,
     @Query('page') page?: number,

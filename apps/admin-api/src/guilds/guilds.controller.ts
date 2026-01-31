@@ -8,17 +8,24 @@ import {
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { AdminAuthGuard } from '../auth/admin-auth.guard';
 import { GuildsService } from './guilds.service';
 import { GuildsQueryDto } from './dto/guilds-query.dto';
 import { GuildIdParamDto } from './dto/guild-id-param.dto';
 
+@ApiTags('Guilds')
+@ApiBearerAuth()
 @Controller('guilds')
 @UseGuards(AdminAuthGuard)
 export class GuildsController {
   constructor(private readonly guildsService: GuildsService) {}
 
   @Get()
+  @ApiOperation({
+    summary: 'List guilds',
+    description: 'Returns paginated guilds with filters (search, minMembers, sortBy, sortOrder). Admin JWT.',
+  })
   async getGuilds(
     @Query() query: GuildsQueryDto,
   ): Promise<{
@@ -49,6 +56,10 @@ export class GuildsController {
   }
 
   @Get(':id')
+  @ApiOperation({
+    summary: 'Get guild by ID',
+    description: 'Returns guild details, config, stats, premium/verified. Admin JWT.',
+  })
   async getGuildById(
     @Param() params: GuildIdParamDto,
   ): Promise<{
@@ -77,6 +88,10 @@ export class GuildsController {
 
   @Delete(':id')
   @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Force leave guild',
+    description: 'Removes bot from guild. Admin JWT.',
+  })
   async forceLeaveGuild(
     @Param() params: GuildIdParamDto,
   ): Promise<{ data: { success: true } }> {

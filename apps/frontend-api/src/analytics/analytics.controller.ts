@@ -1,4 +1,5 @@
 import { Controller, Get, Headers, Param, Query, UseGuards } from '@nestjs/common';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { GuildAdminGuard } from '../guilds/guards/guild-admin.guard';
 import { GuildIdParamDto } from '../guilds/dto/guild-id-param.dto';
@@ -10,12 +11,19 @@ import {
   AnalyticsQueryDto,
 } from './dto';
 
+@ApiTags('Analytics')
+@ApiBearerAuth()
 @Controller('guilds/:guildId/analytics')
 @UseGuards(JwtAuthGuard, GuildAdminGuard)
 export class AnalyticsController {
   constructor(private readonly analyticsService: AnalyticsService) {}
 
   @Get()
+  @ApiOperation({
+    summary: 'Get combined analytics',
+    description:
+      'Returns time series, heatmap, summary, top channels, top members, role distribution, top commands for the guild. Query: from, to, timezone. Bearer JWT, guild admin.',
+  })
   async getCombinedAnalytics(
     @Param() params: GuildIdParamDto,
     @Query() query: AnalyticsQueryDto,
@@ -73,6 +81,11 @@ export class AnalyticsController {
   }
 
   @Get('overview')
+  @ApiOperation({
+    summary: 'Get analytics overview',
+    description:
+      'Returns total messages, active members (24h, 7d). Bearer JWT, guild admin.',
+  })
   async getOverview(
     @Param() params: GuildIdParamDto,
     @Query() query: OverviewQueryDto,
@@ -92,6 +105,11 @@ export class AnalyticsController {
   }
 
   @Get('activity-chart')
+  @ApiOperation({
+    summary: 'Get activity chart data',
+    description:
+      'Returns time-series data for activity chart (date, messages, members, voiceMinutes). Query: from, to, period, timezone. Bearer JWT, guild admin.',
+  })
   async getActivityChart(
     @Param() params: GuildIdParamDto,
     @Query() query: ActivityChartQueryDto,
@@ -115,6 +133,11 @@ export class AnalyticsController {
   }
 
   @Get('top-members')
+  @ApiOperation({
+    summary: 'Get top members',
+    description:
+      'Returns top members by messages or voice minutes. Query: sortBy, limit. Bearer JWT, guild admin.',
+  })
   async getTopMembers(
     @Param() params: GuildIdParamDto,
     @Query() query: TopMembersQueryDto,

@@ -13,6 +13,7 @@ import {
   Res,
   NotFoundException,
 } from '@nestjs/common';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Response } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
@@ -31,6 +32,8 @@ import { UpgradeSubscriptionDto } from '../billing/dto/upgrade-subscription.dto'
 import { InvoicesQueryDto } from '../billing/dto/invoices-query.dto';
 import { InvoiceIdParamDto } from '../billing/dto/invoice-id-param.dto';
 
+@ApiTags('Me')
+@ApiBearerAuth()
 @Controller('me')
 @UseGuards(JwtAuthGuard)
 export class MeController {
@@ -42,6 +45,11 @@ export class MeController {
   ) {}
 
   @Get()
+  @ApiOperation({
+    summary: 'Get current user profile',
+    description:
+      'Returns the authenticated user profile (id, name, email, avatar). Use to display or sync user info. Requires Bearer JWT.',
+  })
   async getMe(
     @CurrentUser() user: User,
   ): Promise<{
@@ -57,6 +65,11 @@ export class MeController {
   }
 
   @Get('guilds')
+  @ApiOperation({
+    summary: 'List my guilds',
+    description:
+      'Returns paginated list of Discord servers the user has access to (id, name, status, memberCount, subscriptionTier, etc.). Use for server picker. Requires Bearer JWT.',
+  })
   async getMyGuilds(
     @CurrentUser() user: User,
     @Query() query: MeGuildsQueryDto,
@@ -86,6 +99,11 @@ export class MeController {
   }
 
   @Get('team')
+  @ApiOperation({
+    summary: 'List team members',
+    description:
+      'Returns team members for the current user (id, name, email, avatar, role). Use for team management UI. Requires Bearer JWT.',
+  })
   async getTeam(
     @CurrentUser() user: User,
     @Query() query: TeamQueryDto,
@@ -110,6 +128,11 @@ export class MeController {
 
   @Post('team/invite')
   @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({
+    summary: 'Invite team member',
+    description:
+      'Sends an invite (by email) to join the user\'s team. Body: email, role. Returns created invite. Requires Bearer JWT.',
+  })
   async inviteTeamMember(
     @CurrentUser() user: User,
     @Body() dto: InviteTeamDto,
@@ -123,6 +146,11 @@ export class MeController {
   }
 
   @Patch('team/:memberId')
+  @ApiOperation({
+    summary: 'Update team member role',
+    description:
+      'Updates a team member\'s role. Body: role. Returns updated member. Requires Bearer JWT.',
+  })
   async updateTeamMember(
     @CurrentUser() user: User,
     @Param() params: MemberIdParamDto,
@@ -146,6 +174,11 @@ export class MeController {
   }
 
   @Delete('team/:memberId')
+  @ApiOperation({
+    summary: 'Remove team member',
+    description:
+      'Removes a member from the user\'s team. Requires Bearer JWT.',
+  })
   async removeTeamMember(
     @CurrentUser() user: User,
     @Param() params: MemberIdParamDto,
@@ -155,6 +188,11 @@ export class MeController {
   }
 
   @Get('subscription')
+  @ApiOperation({
+    summary: 'Get current subscription',
+    description:
+      'Returns the user\'s current plan (id, name, price, pricePeriod). Use for billing UI. Requires Bearer JWT.',
+  })
   async getSubscription(
     @CurrentUser() user: User,
   ): Promise<{
@@ -165,6 +203,11 @@ export class MeController {
   }
 
   @Post('subscription/upgrade')
+  @ApiOperation({
+    summary: 'Upgrade subscription',
+    description:
+      'Initiates subscription upgrade (e.g. to pro). Body: planId. Returns updated subscription or payment URL. Requires Bearer JWT.',
+  })
   async upgradeSubscription(
     @CurrentUser() user: User,
     @Body() dto: UpgradeSubscriptionDto,
@@ -181,6 +224,11 @@ export class MeController {
 
   @Post('subscription/cancel')
   @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Cancel subscription',
+    description:
+      'Cancels the current subscription at period end. Requires Bearer JWT.',
+  })
   async cancelSubscription(
     @CurrentUser() user: User,
   ): Promise<{ data: { success: true } }> {
@@ -189,6 +237,11 @@ export class MeController {
   }
 
   @Get('usage')
+  @ApiOperation({
+    summary: 'Get usage and limits',
+    description:
+      'Returns usage vs limits for servers, members, messages. Use for quota display. Requires Bearer JWT.',
+  })
   async getUsage(
     @CurrentUser() user: User,
   ): Promise<{
@@ -203,6 +256,11 @@ export class MeController {
   }
 
   @Get('invoices')
+  @ApiOperation({
+    summary: 'List invoices',
+    description:
+      'Returns paginated list of billing invoices. Use for billing history. Requires Bearer JWT.',
+  })
   async getInvoices(
     @CurrentUser() user: User,
     @Query() query: InvoicesQueryDto,
@@ -225,6 +283,11 @@ export class MeController {
   }
 
   @Get('invoices/:invoiceId/download')
+  @ApiOperation({
+    summary: 'Download invoice PDF',
+    description:
+      'Returns invoice file (PDF) as download. Requires Bearer JWT.',
+  })
   async downloadInvoice(
     @CurrentUser() user: User,
     @Param() params: InvoiceIdParamDto,
@@ -249,6 +312,11 @@ export class MeController {
   }
 
   @Patch()
+  @ApiOperation({
+    summary: 'Update my profile',
+    description:
+      'Updates the current user profile (name, email, avatar). Body: partial profile. Returns updated user. Requires Bearer JWT.',
+  })
   async updateMe(
     @CurrentUser() user: User,
     @Body() dto: PatchMeDto,

@@ -1,4 +1,5 @@
 import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { User } from '@app/shared';
@@ -6,12 +7,19 @@ import { GuildsService } from '../guilds/guilds.service';
 import { CompanyIdParamDto } from './dto/company-id-param.dto';
 import { CompanyGuildsQueryDto } from './dto/company-guilds-query.dto';
 
+@ApiTags('Companies')
+@ApiBearerAuth()
 @Controller('companies')
 @UseGuards(JwtAuthGuard)
 export class CompaniesController {
   constructor(private readonly guildsService: GuildsService) {}
 
   @Get(':companyId/guilds')
+  @ApiOperation({
+    summary: 'List company guilds',
+    description:
+      'Returns paginated list of guilds belonging to the company (team). Use for team dashboard. Requires Bearer JWT.',
+  })
   async getCompanyGuilds(
     @CurrentUser() user: User,
     @Param() params: CompanyIdParamDto,

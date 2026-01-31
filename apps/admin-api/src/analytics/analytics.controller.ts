@@ -1,12 +1,19 @@
 import { Controller, Get, Query } from '@nestjs/common';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { AnalyticsService } from './analytics.service';
 import { AnalyticsQueryDto } from './dto/analytics-query.dto';
 
+@ApiTags('Analytics')
+@ApiBearerAuth()
 @Controller('analytics')
 export class AnalyticsController {
   constructor(private readonly analyticsService: AnalyticsService) {}
 
   @Get('counters')
+  @ApiOperation({
+    summary: 'Counters analytics',
+    description: 'Returns counter distribution, top templates, total active, avg per guild. Query: from, to. Admin JWT.',
+  })
   async getCounters(
     @Query() query: AnalyticsQueryDto,
   ): Promise<{
@@ -27,6 +34,10 @@ export class AnalyticsController {
   }
 
   @Get('widgets')
+  @ApiOperation({
+    summary: 'Widgets analytics',
+    description: 'Returns total views/clicks, CTR, time series, top referrers. Query: from, to. Admin JWT.',
+  })
   async getWidgets(
     @Query() query: AnalyticsQueryDto,
   ): Promise<{
@@ -43,6 +54,10 @@ export class AnalyticsController {
   }
 
   @Get('growth')
+  @ApiOperation({
+    summary: 'Growth analytics',
+    description: 'Returns install sources, leaderboard, total installs. Query: from, to. Admin JWT.',
+  })
   async getGrowth(
     @Query() query: AnalyticsQueryDto,
   ): Promise<{
@@ -63,6 +78,10 @@ export class AnalyticsController {
   }
 
   @Get('commands')
+  @ApiOperation({
+    summary: 'Commands analytics',
+    description: 'Returns command usage, errors, latency. Query: from, to. Admin JWT.',
+  })
   async getCommands(
     @Query() query: AnalyticsQueryDto,
   ): Promise<{
@@ -80,6 +99,10 @@ export class AnalyticsController {
   }
 
   @Get('leaderboards')
+  @ApiOperation({
+    summary: 'Leaderboards list',
+    description: 'Returns list of guild leaderboards (id, name, memberCount, plan). Admin JWT.',
+  })
   async getLeaderboards(): Promise<{
     data: Array<{
       id: string;

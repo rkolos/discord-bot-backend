@@ -1,4 +1,5 @@
 import { Controller, Get } from '@nestjs/common';
+import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import {
   HealthCheckService,
   TypeOrmHealthIndicator,
@@ -7,7 +8,9 @@ import {
   type HealthIndicatorResult,
 } from '@nestjs/terminus';
 import { RedisService, ClickHouseService } from '@app/shared';
+import { Public } from '../auth/decorators/public.decorator';
 
+@ApiTags('Health')
 @Controller('health')
 export class HealthController {
   constructor(
@@ -17,8 +20,13 @@ export class HealthController {
     private readonly clickhouse: ClickHouseService,
   ) {}
 
+  @Public()
   @Get()
   @HealthCheck()
+  @ApiOperation({
+    summary: 'Health check',
+    description: 'Checks database, Redis, ClickHouse. No auth. Public.',
+  })
   async check(): Promise<HealthCheckResult> {
     return this.health.check([
       () => this.db.pingCheck('database', { timeout: 3000 }),

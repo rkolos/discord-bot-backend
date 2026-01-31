@@ -10,6 +10,7 @@ import {
   UnauthorizedException,
   UseGuards,
 } from '@nestjs/common';
+import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Request, Response } from 'express';
 import { Throttle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
@@ -25,6 +26,7 @@ const COOKIE_PATH = '/api/auth/refresh';
 const COOKIE_MAX_AGE_DAYS = 7;
 const COOKIE_MAX_AGE_SECONDS = COOKIE_MAX_AGE_DAYS * 24 * 60 * 60;
 
+@ApiTags('Auth')
 @Controller('auth')
 export class AuthController {
   constructor(
@@ -36,6 +38,11 @@ export class AuthController {
   @Post('login')
   @HttpCode(HttpStatus.OK)
   @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @ApiOperation({
+    summary: 'Admin login',
+    description:
+      'Authenticates admin by email and password. Returns accessToken and user; sets refresh_token cookie. Internal API.',
+  })
   async login(
     @Body() dto: LoginDto,
     @Res({ passthrough: true }) res: Response,
@@ -78,6 +85,10 @@ export class AuthController {
 
   @Get('me')
   @UseGuards(AdminAuthGuard)
+  @ApiOperation({
+    summary: 'Get current admin',
+    description: 'Returns authenticated admin profile (id, email, name, role). Requires Bearer JWT.',
+  })
   async me(
     @CurrentAdmin() admin: AdminUser,
   ): Promise<{
@@ -103,6 +114,10 @@ export class AuthController {
   @Public()
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Refresh access token',
+    description: 'Exchanges refresh_token cookie for new accessToken. Internal API.',
+  })
   async refresh(
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
@@ -131,6 +146,10 @@ export class AuthController {
   @Post('logout')
   @HttpCode(HttpStatus.OK)
   @UseGuards(AdminAuthGuard)
+  @ApiOperation({
+    summary: 'Admin logout',
+    description: 'Invalidates refresh token and clears cookie. Requires Bearer JWT.',
+  })
   async logout(
     @CurrentAdmin() admin: AdminUser,
     @Req() req: Request,

@@ -51,7 +51,7 @@ services:
         hard: 262144
 
   # --- Applications (Services) ---
-  # Frontend API — public; host 3002 to avoid conflict with local app on 3000
+  # Frontend API — public; Discord OAuth, port 3001 for login/callback
   frontend-api:
     build:
       context: .
@@ -60,23 +60,27 @@ services:
     env_file: .env
     environment:
       NODE_ENV: development
+      PORT: 3001
+      FRONTEND_API_URL: http://localhost:3001
       POSTGRES_HOST: postgres
       DB_HOST: postgres
       REDIS_HOST: redis
+      REDIS_PORT: 6379
       CLICKHOUSE_HOST: clickhouse
     volumes:
       - .:/app
       - /app/node_modules
     ports:
-      - "3002:3000"
+      - "3001:3001"
     command: npm run start:dev -- frontend-api
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
+      clickhouse: { condition: service_started }
     networks:
       - sn-network
 
-  # Admin API — port 3001 exposed; in prod access only via VPN
+  # Admin API — port 3002; in prod access only via VPN
   admin-api:
     build:
       context: .
@@ -85,20 +89,23 @@ services:
     env_file: .env
     environment:
       NODE_ENV: development
-      PORT: 3001
+      PORT: 3002
+      ADMIN_API_URL: http://localhost:3002
       POSTGRES_HOST: postgres
       DB_HOST: postgres
       REDIS_HOST: redis
+      REDIS_PORT: 6379
       CLICKHOUSE_HOST: clickhouse
     volumes:
       - .:/app
       - /app/node_modules
     ports:
-      - "3001:3001"
+      - "3002:3002"
     command: npm run start:dev -- admin-api
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
+      clickhouse: { condition: service_started }
     networks:
       - sn-network
 
@@ -110,13 +117,19 @@ services:
     env_file: .env
     environment:
       NODE_ENV: development
+      POSTGRES_HOST: postgres
+      DB_HOST: postgres
       REDIS_HOST: redis
+      REDIS_PORT: 6379
+      CLICKHOUSE_HOST: clickhouse
     volumes:
       - .:/app
       - /app/node_modules
     command: npm run start:dev -- bot-service
     depends_on:
+      postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
+      clickhouse: { condition: service_started }
     networks:
       - sn-network
 
@@ -128,13 +141,17 @@ services:
     env_file: .env
     environment:
       NODE_ENV: development
+      POSTGRES_HOST: postgres
+      DB_HOST: postgres
       REDIS_HOST: redis
+      REDIS_PORT: 6379
       CLICKHOUSE_HOST: clickhouse
     volumes:
       - .:/app
       - /app/node_modules
     command: npm run start:dev -- ingestor-worker
     depends_on:
+      postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
       clickhouse: { condition: service_started }
     networks:
@@ -151,6 +168,7 @@ services:
       POSTGRES_HOST: postgres
       DB_HOST: postgres
       REDIS_HOST: redis
+      REDIS_PORT: 6379
     volumes:
       - .:/app
       - /app/node_modules

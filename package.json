@@ -27,7 +27,14 @@
     "migration:run": "typeorm-ts-node-commonjs migration:run -d libs/shared/src/database/data-source.ts",
     "migration:revert": "typeorm-ts-node-commonjs migration:revert -d libs/shared/src/database/data-source.ts",
     "create-super-admin": "ts-node scripts/create-super-admin.ts",
-    "register-commands": "ts-node scripts/register-commands.ts"
+    "register-commands": "ts-node scripts/register-commands.ts",
+    "seed": "ts-node scripts/seed.ts",
+    "smoke-test": "npm run seed -- --clean && ts-node scripts/smoke-test.ts",
+    "seed-and-smoke": "npm run smoke-test",
+    "openapi:frontend": "ts-node -r tsconfig-paths/register scripts/generate-openapi-frontend.ts",
+    "openapi:admin": "ts-node -r tsconfig-paths/register scripts/generate-openapi-admin.ts",
+    "openapi:export": "npm run openapi:frontend && npm run openapi:admin",
+    "build:api-with-docs": "nest build frontend-api && nest build admin-api && npm run openapi:export"
   },
   "dependencies": {
     "@clickhouse/client": "^1.8.0",
@@ -39,7 +46,8 @@
     "@nestjs/passport": "^10.0.0",
     "@nestjs/platform-express": "^10.0.0",
     "@nestjs/schedule": "^4.0.0",
-    "@nestjs/terminus": "^10.3.0",
+    "@nestjs/swagger": "^7.4.0",
+    "@nestjs/terminus": "^11.0.0",
     "@nestjs/throttler": "^6.0.0",
     "@nestjs/typeorm": "^10.0.0",
     "axios": "^1.13.4",
@@ -60,6 +68,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.2",
+    "@faker-js/faker": "^9.4.0",
     "@nestjs/cli": "^10.0.0",
     "@nestjs/testing": "^10.4.22",
     "@testcontainers/clickhouse": "^11.11.0",
@@ -80,6 +89,7 @@
     "supertest": "^7.2.2",
     "ts-jest": "^29.4.6",
     "ts-node": "^10.9.2",
+    "tsconfig-paths": "^4.2.0",
     "typescript": "^5.0.0",
     "typescript-eslint": "^8.54.0"
   }

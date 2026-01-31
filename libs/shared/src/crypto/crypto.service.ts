@@ -1,13 +1,9 @@
 import { Injectable } from '@nestjs/common';
-import {
-  createCipheriv,
-  createDecipheriv,
-  randomBytes,
-} from 'node:crypto';
+import { createDecipheriv } from 'node:crypto';
 import { SharedConfigService } from '../config/shared-config.service';
+import { encryptToken } from './encrypt-util';
 
 const ALGORITHM = 'aes-256-gcm';
-const IV_LENGTH = 12;
 const AUTH_TAG_LENGTH = 16;
 const VERSION = 'v1';
 
@@ -18,28 +14,12 @@ export class CryptoService {
   /**
    * Validates encryption key at service init (get auth() throws if invalid).
    */
-  private getKey(): Buffer {
-    const key = this.sharedConfig.auth.encryptionKeyV1;
-    return Buffer.from(key, 'utf8');
+  private getKey(): string {
+    return this.sharedConfig.auth.encryptionKeyV1;
   }
 
   encrypt(plainText: string): string {
-    const key = this.getKey();
-    const iv = randomBytes(IV_LENGTH);
-    const cipher = createCipheriv(ALGORITHM, key, iv, {
-      authTagLength: AUTH_TAG_LENGTH,
-    });
-    const encrypted = Buffer.concat([
-      cipher.update(plainText, 'utf8'),
-      cipher.final(),
-    ]);
-    const authTag = cipher.getAuthTag();
-    return [
-      VERSION,
-      iv.toString('base64'),
-      authTag.toString('base64'),
-      encrypted.toString('base64'),
-    ].join(':');
+    return encryptToken(plainText, this.getKey());
   }
 
   decrypt(encryptedText: string): string {
@@ -53,7 +33,7 @@ export class CryptoService {
     const iv = Buffer.from(ivB64, 'base64');
     const authTag = Buffer.from(authTagB64, 'base64');
     const ciphertext = Buffer.from(cipherB64, 'base64');
-    const key = this.getKey();
+    const key = Buffer.from(this.getKey(), 'utf8');
     const decipher = createDecipheriv(ALGORITHM, key, iv, {
       authTagLength: AUTH_TAG_LENGTH,
     });

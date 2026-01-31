@@ -137,8 +137,8 @@ export class AuthService {
         lastLoginAt: now,
       })
       .orUpdate(
-        ['username', 'discriminator', 'avatarUrl', 'email', 'lastLoginAt'],
-        ['discordId'],
+        ['username', 'discriminator', 'avatar_url', 'email', 'last_login_at'],
+        ['discord_id'],
         { skipUpdateIfNoValuesChanged: true },
       )
       .execute();
