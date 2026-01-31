@@ -1,6 +1,9 @@
 import { BadRequestException, ValidationPipe } from '@nestjs/common';
-import { HttpAdapterHost } from '@nestjs/core';
-import { NestFactory } from '@nestjs/core';
+import { HttpAdapterHost, NestFactory } from '@nestjs/core';
+
+function parseCorsOrigins(value: string): string[] {
+  return value.split(',').map((s) => s.trim()).filter(Boolean);
+}
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import * as cookieParser from 'cookie-parser';
 import { AllExceptionsFilter } from '@app/shared';
@@ -9,6 +12,13 @@ import { AppModule } from './app.module';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   app.enableShutdownHooks();
+  const corsOrigins = parseCorsOrigins(
+    process.env.CORS_ORIGIN ?? process.env.ADMIN_PANEL_URL ?? 'http://localhost:3020',
+  );
+  app.enableCors({
+    origin: corsOrigins,
+    credentials: true,
+  });
   app.setGlobalPrefix('api', { exclude: ['health', 'docs'] });
   const httpAdapterHost = app.get(HttpAdapterHost);
   app.useGlobalFilters(new AllExceptionsFilter(httpAdapterHost));
