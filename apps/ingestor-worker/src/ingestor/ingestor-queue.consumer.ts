@@ -97,10 +97,18 @@ export class IngestorQueueConsumer implements OnModuleInit, OnModuleDestroy {
 
     const enrichment = await this.guildSettings.getSettings(dto.guildId);
 
-    if (dto.eventType === 'VOICE_STATE_UPDATE') {
-      const userId = dto.discordUserId ?? dto.userId ?? null;
+    const isVoiceEvent =
+      dto.eventType === 'VOICE_STATE_UPDATE' || dto.eventType === 'voice_change';
+    if (isVoiceEvent) {
+      const userId =
+        dto.discordUserId ??
+        dto.userId ??
+        (dto.payload as { userId?: string })?.userId ??
+        null;
       if (!userId) {
-        this.logger.warn(`VOICE_STATE_UPDATE missing discordUserId/userId for job ${job.id}`);
+        this.logger.warn(
+          `Voice event missing discordUserId/userId for job ${job.id}`,
+        );
       }
       const channelId = dto.channelId ?? (dto.payload as { channelId?: string })?.channelId;
       const isJoin = Boolean(channelId && String(channelId).trim());
@@ -110,13 +118,20 @@ export class IngestorQueueConsumer implements OnModuleInit, OnModuleDestroy {
       }
       if (!isJoin && userId) {
         const leave = await this.voiceSession.recordLeave(dto.guildId, userId);
-        const payload = { ...((dto.payload as Record<string, unknown>) ?? {}), voiceMinutes: leave?.voiceMinutes ?? 0 };
-        const raw = toRawEvent(dto, payload, enrichment);
+        const payload = {
+          ...((dto.payload as Record<string, unknown>) ?? {}),
+          voiceMinutes: leave?.voiceMinutes ?? 0,
+        };
+        const raw = toRawEventForVoice(dto, payload, enrichment);
         this.clickhouseIngestor.pushEvent(raw);
         return;
       }
       if (!isJoin && !userId) {
-        const raw = toRawEvent(dto, (dto.payload as Record<string, unknown>) ?? {}, enrichment);
+        const raw = toRawEventForVoice(
+          dto,
+          (dto.payload as Record<string, unknown>) ?? {},
+          enrichment,
+        );
         this.clickhouseIngestor.pushEvent(raw);
         return;
       }
@@ -141,6 +156,32 @@ function toRawEvent(
     eventId: dto.eventId,
     eventTime: dto.eventTime,
     eventType: dto.eventType,
+    guildId: dto.guildId,
+    discordGuildId: dto.discordGuildId,
+    userId: dto.userId ?? undefined,
+    discordUserId: dto.discordUserId ?? undefined,
+    channelId: channelId ?? undefined,
+    roleId: dto.roleId ?? undefined,
+    commandName: dto.commandName ?? undefined,
+    planTier: (dto.planTier as string) ?? enrichment.planTier,
+    isBotGenerated: dto.isBotGenerated ?? false,
+    payload: JSON.stringify(payload),
+    isHistorical: false,
+    anonymizeUserData: enrichment.anonymizeUserData,
+  };
+}
+
+/** Пишет voice_change как VOICE_STATE_UPDATE в ClickHouse для учёта в mv_daily_activity. */
+function toRawEventForVoice(
+  dto: RawEventDto,
+  payload: Record<string, unknown>,
+  enrichment: GuildSettingsEnrichment,
+): RawEvent {
+  const channelId = dto.channelId ?? (payload.channelId as string | undefined);
+  return {
+    eventId: dto.eventId,
+    eventTime: dto.eventTime,
+    eventType: 'VOICE_STATE_UPDATE',
     guildId: dto.guildId,
     discordGuildId: dto.discordGuildId,
     userId: dto.userId ?? undefined,

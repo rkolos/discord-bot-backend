@@ -142,16 +142,30 @@ async function run(): Promise<void> {
   client.on('guildCreate', async (guild) => {
     console.log(`[shard-worker] GUILD_CREATE received from Discord: discordGuildId=${guild.id} name=${guild.name}`);
     try {
-      const firstContact = await syncOnGuildCreate(AppDataSource.manager, {
+      const result = await syncOnGuildCreate(AppDataSource.manager, {
         discordGuildId: guild.id,
         guildName: guild.name,
         shardId: SHARD_ID,
         discordOwnerId: guild.ownerId,
       });
-      if (firstContact) {
-        await guildSetupQueue.add('setup', firstContact, { priority: 5 }).catch((e) => {
-          console.error(`[shard-worker] guildSetupQueue.add error: ${(e as Error).message}`);
-        });
+      if (result) {
+        if ('syncedGuildId' in result) {
+          const url = `${internalBaseUrl()}/internal/guilds/${result.syncedGuildId}/sync`;
+          const secret = process.env['INTERNAL_API_SECRET'];
+          await fetch(url, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(secret && { 'X-Internal-Secret': secret }),
+            },
+          }).catch((e) => {
+            console.error(`[shard-worker] guild sync HTTP error: ${(e as Error).message}`);
+          });
+        } else {
+          await guildSetupQueue.add('setup', result, { priority: 5 }).catch((e) => {
+            console.error(`[shard-worker] guildSetupQueue.add error: ${(e as Error).message}`);
+          });
+        }
       }
     } catch (err) {
       console.error(`[shard-worker] guildCreate sync error: ${(err as Error).message}`);

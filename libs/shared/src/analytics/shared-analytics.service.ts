@@ -18,6 +18,20 @@ export class SharedAnalyticsService {
     return this.sharedConfig.clickhouse.database || 'default';
   }
 
+  async getTotalVoiceMinutesByGuildId(guildId: string): Promise<number> {
+    const db = this.getDatabase();
+    const result = await this.clickhouse.query({
+      query: `
+        SELECT sumMerge(voice_minutes) AS total
+        FROM ${db}.mv_daily_activity
+        WHERE guild_id = {guildId:UUID}
+        GROUP BY guild_id
+      `,
+      query_params: { guildId },
+    });
+    return this.parseSingleNumber(result, 0);
+  }
+
   async getOverviewByGuildId(
     guildId: string,
     timezone?: string,
@@ -106,6 +120,8 @@ export class SharedAnalyticsService {
     _timezone?: string,
   ): Promise<ActivityChartPointDto[]> {
     const db = this.getDatabase();
+    const fromDate = from.slice(0, 10);
+    const toDate = to.slice(0, 10);
 
     const result = await this.clickhouse.query({
       query: `
@@ -121,7 +137,7 @@ export class SharedAnalyticsService {
         GROUP BY guild_id, event_date
         ORDER BY event_date ASC
       `,
-      query_params: { guildId, from, to },
+      query_params: { guildId, from: fromDate, to: toDate },
     });
 
     const rows = (await result.json()) as ActivityChartPointDto[];
@@ -185,6 +201,164 @@ export class SharedAnalyticsService {
       avatar: '',
       messages: Number(row.messages ?? 0),
       voiceMinutes: Number(row.voiceMinutes ?? 0),
+    }));
+  }
+
+  async getRoleDistributionByGuildId(
+    guildId: string,
+    from: string,
+    to: string,
+  ): Promise<Array<{ id: string; count: number }>> {
+    const db = this.getDatabase();
+    const fromDate = from.slice(0, 10);
+    const toDate = to.slice(0, 10);
+
+    const result = await this.clickhouse.query({
+      query: `
+        SELECT
+          role_id AS id,
+          sum(events_count) AS count
+        FROM ${db}.mv_role_stats
+        WHERE guild_id = {guildId:UUID}
+          AND event_date >= {from:Date}
+          AND event_date <= {to:Date}
+        GROUP BY guild_id, role_id
+        ORDER BY count DESC
+      `,
+      query_params: { guildId, from: fromDate, to: toDate },
+    });
+
+    const rows = (await result.json()) as { id: string; count: string | number }[];
+    const data = Array.isArray(rows)
+      ? rows
+      : (rows as unknown as { data?: typeof rows }).data ?? [];
+    return data.map((row) => ({
+      id: row.id ?? '',
+      count: Number(row.count ?? 0),
+    }));
+  }
+
+  async getTopChannelsByMessages(
+    guildId: string,
+    from: string,
+    to: string,
+    limit: number,
+  ): Promise<Array<{ id: string; value: number }>> {
+    const db = this.getDatabase();
+    const fromDate = from.slice(0, 10);
+    const toDate = to.slice(0, 10);
+
+    const result = await this.clickhouse.query({
+      query: `
+        SELECT
+          channel_id AS id,
+          sum(messages_count) AS value
+        FROM ${db}.mv_top_channels_messages
+        WHERE guild_id = {guildId:UUID}
+          AND event_date >= {from:Date}
+          AND event_date <= {to:Date}
+        GROUP BY guild_id, channel_id
+        ORDER BY value DESC
+        LIMIT {limit:UInt32}
+      `,
+      query_params: { guildId, from: fromDate, to: toDate, limit },
+    });
+
+    const rows = (await result.json()) as { id: string; value: string | number }[];
+    const data = Array.isArray(rows)
+      ? rows
+      : (rows as unknown as { data?: typeof rows }).data ?? [];
+    return data.map((row) => ({
+      id: row.id ?? '',
+      value: Number(row.value ?? 0),
+    }));
+  }
+
+  async getTopChannelsByVoice(
+    guildId: string,
+    from: string,
+    to: string,
+    limit: number,
+  ): Promise<Array<{ id: string; value: number }>> {
+    const db = this.getDatabase();
+    const fromDate = from.slice(0, 10);
+    const toDate = to.slice(0, 10);
+
+    const result = await this.clickhouse.query({
+      query: `
+        SELECT
+          channel_id AS id,
+          sum(voice_minutes) AS value
+        FROM ${db}.mv_top_channels_voice
+        WHERE guild_id = {guildId:UUID}
+          AND event_date >= {from:Date}
+          AND event_date <= {to:Date}
+        GROUP BY guild_id, channel_id
+        ORDER BY value DESC
+        LIMIT {limit:UInt32}
+      `,
+      query_params: { guildId, from: fromDate, to: toDate, limit },
+    });
+
+    const rows = (await result.json()) as { id: string; value: string | number }[];
+    const data = Array.isArray(rows)
+      ? rows
+      : (rows as unknown as { data?: typeof rows }).data ?? [];
+    return data.map((row) => ({
+      id: row.id ?? '',
+      value: Number(row.value ?? 0),
+    }));
+  }
+
+  async getTopCommandsByGuildId(
+    guildId: string,
+    from: string,
+    to: string,
+    limit: number,
+  ): Promise<
+    Array<{
+      id: string;
+      name: string;
+      usageCount: number;
+      lastUsedAt: string;
+      category: string;
+    }>
+  > {
+    const db = this.getDatabase();
+    const fromDate = from.slice(0, 10);
+    const toDate = to.slice(0, 10);
+
+    const result = await this.clickhouse.query({
+      query: `
+        SELECT
+          command_name AS name,
+          sum(execution_count) AS usageCount,
+          max(event_date) AS lastUsedAt
+        FROM ${db}.mv_command_stats
+        WHERE guild_id = {guildId:UUID}
+          AND event_date >= {from:Date}
+          AND event_date <= {to:Date}
+        GROUP BY guild_id, command_name
+        ORDER BY usageCount DESC
+        LIMIT {limit:UInt32}
+      `,
+      query_params: { guildId, from: fromDate, to: toDate, limit },
+    });
+
+    const rows = (await result.json()) as {
+      name: string;
+      usageCount: string | number;
+      lastUsedAt: string;
+    }[];
+    const data = Array.isArray(rows)
+      ? rows
+      : (rows as unknown as { data?: typeof rows }).data ?? [];
+    return data.map((row) => ({
+      id: row.name ?? '',
+      name: row.name ?? '',
+      usageCount: Number(row.usageCount ?? 0),
+      lastUsedAt: row.lastUsedAt ? `${row.lastUsedAt}T00:00:00.000Z` : '',
+      category: '',
     }));
   }
 

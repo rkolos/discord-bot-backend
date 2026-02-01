@@ -158,6 +158,22 @@ export class GuildSetupConsumer implements OnModuleInit, OnModuleDestroy {
       { guildId: savedGuild.id, discordGuildId },
       { priority: 10 },
     );
+
+    const baseUrl = this.configService.get<string>('BOT_SERVICE_INTERNAL_BASE_URL');
+    if (baseUrl) {
+      const url = `${baseUrl.replace(/\/$/, '')}/internal/guilds/${savedGuild.id}/sync`;
+      const secret = this.configService.get<string>('INTERNAL_API_SECRET');
+      await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(secret && { 'X-Internal-Secret': secret }),
+        },
+      }).catch((err) => {
+        this.logger.warn(`Guild sync HTTP error: ${(err as Error).message}`);
+      });
+    }
+
     this.logger.log(`Guild setup job ${job.id}: created guild ${savedGuild.id}, enqueued history:sync`);
   }
 

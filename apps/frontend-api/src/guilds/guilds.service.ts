@@ -1,5 +1,4 @@
 import {
-  ConflictException,
   HttpException,
   HttpStatus,
   Injectable,
@@ -7,6 +6,7 @@ import {
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -18,6 +18,7 @@ import {
   GuildSubscriptionTier,
   ServerSettings,
   CompanyMember,
+  SharedAnalyticsService,
 } from '@app/shared';
 import { CryptoService, RedisService } from '@app/shared';
 import { SharedConfigService } from '@app/shared';
@@ -37,6 +38,8 @@ const DISCORD_API_BASE = 'https://discord.com/api/v10';
 const GUILDS_CACHE_KEY_PREFIX = 'guilds:cache:';
 /** Discord channel type: GUILD_TEXT */
 const CHANNEL_TYPE_TEXT = 0;
+/** Discord channel type: GUILD_VOICE */
+const CHANNEL_TYPE_VOICE = 2;
 const GUILDS_CACHE_TTL_SECONDS = 300; // 5 min
 
 /** Administrator = 0x8, Manage Guild = 0x20 */
@@ -83,6 +86,18 @@ export interface GuildChannelDto {
   name: string;
 }
 
+export interface GuildChannelWithTypeDto {
+  id: string;
+  name: string;
+  type: 'text' | 'voice';
+}
+
+export interface GuildRoleDto {
+  id: string;
+  name: string;
+  color: string;
+}
+
 @Injectable()
 export class GuildsService {
   private readonly logger = new Logger(GuildsService.name);
@@ -93,6 +108,7 @@ export class GuildsService {
     private readonly redis: RedisService,
     private readonly crypto: CryptoService,
     private readonly sharedConfig: SharedConfigService,
+    private readonly configService: ConfigService,
     @InjectRepository(Guild)
     private readonly guildRepository: Repository<Guild>,
     @InjectRepository(ServerSettings)
@@ -102,6 +118,7 @@ export class GuildsService {
     @InjectRepository(CompanyMember)
     private readonly companyMemberRepository: Repository<CompanyMember>,
     private readonly historySyncQueue: HistorySyncQueueService,
+    private readonly sharedAnalytics: SharedAnalyticsService,
   ) {}
 
   async getMeGuildsPaginated(
@@ -254,11 +271,12 @@ export class GuildsService {
         message: 'Guild not found or access denied',
       });
     }
+    const voiceMinutes = await this.sharedAnalytics.getTotalVoiceMinutesByGuildId(guild.id);
     return {
       totalMembers: guild.memberCount,
       totalMessages: Number(guild.messageCount ?? 0),
       activeMembers: guild.onlineMembers ?? 0,
-      voiceMinutes: 0,
+      voiceMinutes,
     };
   }
 
@@ -672,6 +690,24 @@ export class GuildsService {
   }
 
   /**
+   * Возвращает токен бота: сначала из server_settings (кастомный бот), иначе DISCORD_BOT_TOKEN из env (основной бот).
+   */
+  private async resolveToken(guildId: string): Promise<string | null> {
+    const settings = await this.serverSettingsRepository.findOne({
+      where: { guildId },
+      select: ['botTokenEncrypted'],
+    });
+    if (settings?.botTokenEncrypted && settings.botTokenEncrypted.length > 0) {
+      try {
+        return this.crypto.decrypt(settings.botTokenEncrypted);
+      } catch {
+        return null;
+      }
+    }
+    return this.configService.get<string>('DISCORD_BOT_TOKEN') ?? null;
+  }
+
+  /**
    * Возвращает список текстовых каналов гильдии из Discord API (бот должен быть на сервере, токен настроен).
    * При отсутствии токена или ошибке Discord API возвращает пустой массив.
    */
@@ -683,18 +719,8 @@ export class GuildsService {
         message: 'Guild not found or access denied',
       });
     }
-    const settings = await this.serverSettingsRepository.findOne({
-      where: { guildId: guild.id },
-    });
-    if (!settings?.botTokenEncrypted || settings.botTokenEncrypted.length === 0) {
-      return [];
-    }
-    let token: string;
-    try {
-      token = this.crypto.decrypt(settings.botTokenEncrypted);
-    } catch {
-      return [];
-    }
+    const token = await this.resolveToken(guild.id);
+    if (!token) return [];
     try {
       const response = await firstValueFrom(
         this.httpService.get<Array<{ id: string; name: string; type: number }>>(
@@ -708,6 +734,78 @@ export class GuildsService {
       return channels
         .filter((c) => c.type === CHANNEL_TYPE_TEXT)
         .map((c) => ({ id: c.id, name: c.name }));
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * Возвращает список каналов (текстовых и голосовых) для маппинга в topChannels.
+   * При отсутствии токена или ошибке Discord API возвращает пустой массив.
+   */
+  async getChannelsWithTypeForGuild(
+    discordGuildId: string,
+  ): Promise<GuildChannelWithTypeDto[]> {
+    const guild = await this.findGuildByDiscordId(discordGuildId);
+    if (!guild) {
+      throw new NotFoundException({
+        code: 'GUILD_NOT_FOUND',
+        message: 'Guild not found or access denied',
+      });
+    }
+    const token = await this.resolveToken(guild.id);
+    if (!token) return [];
+    try {
+      const response = await firstValueFrom(
+        this.httpService.get<Array<{ id: string; name: string; type: number }>>(
+          `${DISCORD_API_BASE}/guilds/${discordGuildId}/channels`,
+          {
+            headers: { Authorization: `Bot ${token}` },
+          },
+        ),
+      );
+      const channels = response.data ?? [];
+      return channels
+        .filter((c) => c.type === CHANNEL_TYPE_TEXT || c.type === CHANNEL_TYPE_VOICE)
+        .map((c) => ({
+          id: c.id,
+          name: c.name,
+          type: c.type === CHANNEL_TYPE_VOICE ? 'voice' : 'text',
+        }));
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * Возвращает список ролей гильдии из Discord API для маппинга в roleDistribution.
+   * При отсутствии токена или ошибке Discord API возвращает пустой массив.
+   */
+  async getRolesForGuild(discordGuildId: string): Promise<GuildRoleDto[]> {
+    const guild = await this.findGuildByDiscordId(discordGuildId);
+    if (!guild) {
+      throw new NotFoundException({
+        code: 'GUILD_NOT_FOUND',
+        message: 'Guild not found or access denied',
+      });
+    }
+    const token = await this.resolveToken(guild.id);
+    if (!token) return [];
+    try {
+      const response = await firstValueFrom(
+        this.httpService.get<Array<{ id: string; name: string; color: number }>>(
+          `${DISCORD_API_BASE}/guilds/${discordGuildId}/roles`,
+          {
+            headers: { Authorization: `Bot ${token}` },
+          },
+        ),
+      );
+      const roles = response.data ?? [];
+      return roles.map((r) => ({
+        id: r.id,
+        name: r.name,
+        color: r.color ? `#${r.color.toString(16).padStart(6, '0')}` : '',
+      }));
     } catch {
       return [];
     }

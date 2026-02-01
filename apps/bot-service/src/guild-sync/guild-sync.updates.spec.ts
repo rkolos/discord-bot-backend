@@ -116,7 +116,7 @@ describe('guild-sync.updates', () => {
         shardId: 1,
       });
 
-      expect(result).toBeNull();
+      expect(result).toEqual({ syncedGuildId: guild.id });
       expect(guild.isBotInGuild).toBe(true);
       expect(guild.shardId).toBe(1);
       expect(settings.botConnected).toBe(true);

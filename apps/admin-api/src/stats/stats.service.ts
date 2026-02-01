@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, LessThanOrEqual } from 'typeorm';
+import { Repository } from 'typeorm';
 import { Guild } from '@app/shared';
 import { User } from '@app/shared';
 
@@ -29,36 +29,28 @@ export class StatsService {
       return [];
     }
 
-    const dates: string[] = [];
-    const current = new Date(fromDate);
-    current.setUTCHours(0, 0, 0, 0);
-    const end = new Date(toDate);
-    end.setUTCHours(0, 0, 0, 0);
+    const fromStr = fromDate.toISOString().slice(0, 10);
+    const toStr = toDate.toISOString().slice(0, 10);
 
-    while (current <= end) {
-      dates.push(current.toISOString().slice(0, 10));
-      current.setUTCDate(current.getUTCDate() + 1);
-    }
+    const rows = await this.guildRepository.manager.query<
+      { date: string; total_guilds: string; total_users: string }[]
+    >(
+      `WITH date_series AS (
+        SELECT generate_series($1::date, $2::date, '1 day'::interval)::date AS d
+      )
+      SELECT
+        to_char(d, 'YYYY-MM-DD') AS date,
+        (SELECT COUNT(*)::int FROM guilds WHERE created_at <= d::timestamptz + interval '23 hours 59 minutes 59.999 seconds') AS total_guilds,
+        (SELECT COUNT(*)::int FROM users WHERE created_at <= d::timestamptz + interval '23 hours 59 minutes 59.999 seconds') AS total_users
+      FROM date_series
+      ORDER BY d`,
+      [fromStr, toStr],
+    );
 
-    const timeSeries: GrowthTimeSeriesPointDto[] = [];
-
-    for (const dateStr of dates) {
-      const endOfDay = new Date(dateStr + 'T23:59:59.999Z');
-      const [totalGuilds, totalUsers] = await Promise.all([
-        this.guildRepository.count({
-          where: { createdAt: LessThanOrEqual(endOfDay) },
-        }),
-        this.userRepository.count({
-          where: { createdAt: LessThanOrEqual(endOfDay) },
-        }),
-      ]);
-      timeSeries.push({
-        date: dateStr,
-        totalGuilds,
-        totalUsers,
-      });
-    }
-
-    return timeSeries;
+    return rows.map((r) => ({
+      date: r.date,
+      totalGuilds: Number(r.total_guilds),
+      totalUsers: Number(r.total_users),
+    }));
   }
 }

@@ -22,8 +22,8 @@ fi
 echo "Сборка образов..."
 docker compose build
 
-echo "Запуск всех контейнеров..."
-docker compose up -d
+echo "Запуск всех контейнеров (без watch — изменения применяются только после перезапуска)..."
+NEST_START_CMD=start docker compose up -d
 
 echo "Ожидание готовности PostgreSQL..."
 sleep 5

@@ -58,30 +58,47 @@ export class GuildsService {
     const skip = (Math.max(1, page) - 1) * Math.min(100, Math.max(1, limit));
     const take = Math.min(100, Math.max(1, limit));
     const [guilds, total] = await qb.skip(skip).take(take).getManyAndCount();
-    const data = await Promise.all(
-      guilds.map(async (g) => {
-        const [activeCountersCount, widgetsCreatedCount] = await Promise.all([
-          this.counterRepository.count({
-            where: { guildId: g.id, status: 'active' as never },
-          }),
-          this.widgetRepository.count({ where: { guildId: g.id } }),
-        ]);
-        return {
-          id: g.id,
-          discordGuildId: g.discordGuildId,
-          name: g.name,
-          iconUrl: g.iconUrl,
-          ownerId: g.ownerId,
-          memberCount: g.memberCount,
-          shardId: g.shardId,
-          isBotInGuild: g.isBotInGuild,
-          activeCountersCount,
-          widgetsCreatedCount,
-          joinedAt: g.createdAt.toISOString(),
-          historySyncStatus: g.historySyncStatus,
-        };
-      }),
-    );
+
+    let counterMap = new Map<string, number>();
+    let widgetMap = new Map<string, number>();
+
+    if (guilds.length > 0) {
+      const guildIds = guilds.map((g) => g.id);
+      const [counterCounts, widgetCounts] = await Promise.all([
+        this.counterRepository
+          .createQueryBuilder('c')
+          .select('c.guild_id', 'guildId')
+          .addSelect('COUNT(*)', 'count')
+          .where('c.guild_id IN (:...guildIds)', { guildIds })
+          .andWhere('c.status = :status', { status: 'active' })
+          .groupBy('c.guild_id')
+          .getRawMany<{ guildId: string; count: string }>(),
+        this.widgetRepository
+          .createQueryBuilder('w')
+          .select('w.guild_id', 'guildId')
+          .addSelect('COUNT(*)', 'count')
+          .where('w.guild_id IN (:...guildIds)', { guildIds })
+          .groupBy('w.guild_id')
+          .getRawMany<{ guildId: string; count: string }>(),
+      ]);
+      counterMap = new Map(counterCounts.map((r) => [r.guildId, Number(r.count)]));
+      widgetMap = new Map(widgetCounts.map((r) => [r.guildId, Number(r.count)]));
+    }
+
+    const data = guilds.map((g) => ({
+      id: g.id,
+      discordGuildId: g.discordGuildId,
+      name: g.name,
+      iconUrl: g.iconUrl,
+      ownerId: g.ownerId,
+      memberCount: g.memberCount,
+      shardId: g.shardId,
+      isBotInGuild: g.isBotInGuild,
+      activeCountersCount: counterMap.get(g.id) ?? 0,
+      widgetsCreatedCount: widgetMap.get(g.id) ?? 0,
+      joinedAt: g.createdAt.toISOString(),
+      historySyncStatus: g.historySyncStatus,
+    }));
     const totalPages = Math.ceil(total / take) || 1;
     const currentPage = Math.max(1, page);
     return {

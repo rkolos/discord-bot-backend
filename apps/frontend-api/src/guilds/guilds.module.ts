@@ -1,7 +1,7 @@
 import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { HttpModule } from '@nestjs/axios';
-import { CryptoModule } from '@app/shared';
+import { CryptoModule, SharedAnalyticsModule } from '@app/shared';
 import { Guild, GuildModule, ServerSettings, CompanyMember } from '@app/shared';
 import { AuthModule } from '../auth/auth.module';
 import { GuildsController } from './guilds.controller';
@@ -17,6 +17,7 @@ import { GuildAdminGuard } from './guards/guild-admin.guard';
       maxRedirects: 0,
     }),
     CryptoModule,
+    SharedAnalyticsModule,
     forwardRef(() => AuthModule),
   ],
   controllers: [GuildsController],

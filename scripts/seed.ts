@@ -128,6 +128,8 @@ async function runClickHouseMigrations(ch: ClickHouseClient): Promise<void> {
     `CREATE MATERIALIZED VIEW IF NOT EXISTS ${db}.mv_command_stats ENGINE = SummingMergeTree PARTITION BY toStartOfWeek(event_date) ORDER BY (guild_id, command_name, event_date) AS SELECT guild_id, command_name, event_date, count() AS execution_count, sumIf(1, JSONExtractBool(payload, 'isError') = 1) AS error_count FROM ${tableRawEvents} WHERE command_name != '' GROUP BY guild_id, command_name, event_date`,
     `CREATE MATERIALIZED VIEW IF NOT EXISTS ${db}.mv_voice_stats ENGINE = SummingMergeTree PARTITION BY toStartOfWeek(event_date) ORDER BY (guild_id, user_id, event_date) SETTINGS allow_nullable_key = 1 AS SELECT guild_id, user_id, event_date, sum(toUInt64(JSONExtractInt(payload, 'voiceMinutes'))) AS voice_minutes FROM ${tableRawEvents} WHERE event_type = 'VOICE_STATE_UPDATE' GROUP BY guild_id, user_id, event_date`,
     `CREATE MATERIALIZED VIEW IF NOT EXISTS ${db}.mv_top_members ENGINE = SummingMergeTree PARTITION BY toStartOfWeek(event_date) ORDER BY (guild_id, user_id) SETTINGS allow_nullable_key = 1 AS SELECT guild_id, user_id, event_date, sumIf(1, event_type = 'MESSAGE_CREATE') AS message_count, sumIf(toUInt64(JSONExtractInt(payload, 'voiceMinutes')), event_type = 'VOICE_STATE_UPDATE') AS voice_minutes FROM ${tableRawEvents} WHERE is_bot_generated = 0 GROUP BY guild_id, user_id, event_date`,
+    `CREATE MATERIALIZED VIEW IF NOT EXISTS ${db}.mv_top_channels_messages ENGINE = SummingMergeTree PARTITION BY toStartOfWeek(event_date) ORDER BY (guild_id, channel_id, event_date) AS SELECT guild_id, channel_id, event_date, count() AS messages_count FROM ${tableRawEvents} WHERE event_type = 'MESSAGE_CREATE' AND channel_id != '' GROUP BY guild_id, channel_id, event_date`,
+    `CREATE MATERIALIZED VIEW IF NOT EXISTS ${db}.mv_top_channels_voice ENGINE = SummingMergeTree PARTITION BY toStartOfWeek(event_date) ORDER BY (guild_id, channel_id, event_date) AS SELECT guild_id, channel_id, event_date, sum(toUInt64(JSONExtractInt(payload, 'voiceMinutes'))) AS voice_minutes FROM ${tableRawEvents} WHERE event_type = 'VOICE_STATE_UPDATE' AND channel_id != '' GROUP BY guild_id, channel_id, event_date`,
   ];
   for (const q of mvs) {
     await ch.command({ query: q, clickhouse_settings: { wait_end_of_query: 1 } });
@@ -493,7 +495,7 @@ async function seedClickHouse(
     }
   }
 
-  const mvTables = ['mv_daily_activity', 'mv_heatmap', 'mv_voice_stats', 'mv_top_members', 'mv_role_stats', 'mv_command_stats'];
+  const mvTables = ['mv_daily_activity', 'mv_heatmap', 'mv_voice_stats', 'mv_top_members', 'mv_role_stats', 'mv_command_stats', 'mv_top_channels_messages', 'mv_top_channels_voice'];
   for (const mv of mvTables) {
     try {
       await ch.command({

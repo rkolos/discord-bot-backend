@@ -769,7 +769,14 @@
         "parameters": [],
         "responses": {
           "200": {
-            "description": ""
+            "description": "Guild stats",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GuildStatsResponse"
+                }
+              }
+            }
           }
         },
         "tags": [
@@ -788,7 +795,14 @@
         "parameters": [],
         "responses": {
           "200": {
-            "description": ""
+            "description": "Bot connection status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BotStatusResponse"
+                }
+              }
+            }
           }
         },
         "tags": [
@@ -1142,11 +1156,30 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "required": true,
+            "schema": { "type": "string", "format": "date" }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": true,
+            "schema": { "type": "string", "format": "date" }
           }
         ],
         "responses": {
           "200": {
-            "description": ""
+            "description": "Combined analytics data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CombinedAnalyticsResponse"
+                }
+              }
+            }
           }
         },
         "tags": [
@@ -1174,7 +1207,14 @@
         ],
         "responses": {
           "200": {
-            "description": ""
+            "description": "Analytics overview",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalyticsOverviewResponse"
+                }
+              }
+            }
           }
         },
         "tags": [
@@ -1198,11 +1238,30 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "required": true,
+            "schema": { "type": "string", "format": "date" }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": true,
+            "schema": { "type": "string", "format": "date" }
           }
         ],
         "responses": {
           "200": {
-            "description": ""
+            "description": "Activity chart time series",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActivityChartResponse"
+                }
+              }
+            }
           }
         },
         "tags": [
@@ -1576,6 +1635,163 @@
       "PatchLogSettingsDto": {
         "type": "object",
         "properties": {}
+      },
+      "GuildStatsResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "object",
+            "properties": {
+              "totalMembers": { "type": "integer" },
+              "totalMessages": { "type": "integer" },
+              "activeMembers": { "type": "integer" },
+              "voiceMinutes": { "type": "integer" }
+            }
+          }
+        }
+      },
+      "BotStatusResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "object",
+            "properties": {
+              "status": { "type": "string", "enum": ["online", "offline", "error"] },
+              "lastSeen": { "type": "string", "nullable": true },
+              "version": { "type": "string" }
+            }
+          }
+        }
+      },
+      "ActivityChartPoint": {
+        "type": "object",
+        "properties": {
+          "date": { "type": "string" },
+          "messages": { "type": "integer" },
+          "members": { "type": "integer" },
+          "voiceMinutes": { "type": "integer" }
+        }
+      },
+      "ActivityChartResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/ActivityChartPoint" }
+          }
+        }
+      },
+      "AnalyticsOverviewResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "object",
+            "properties": {
+              "totalMessages": { "type": "integer" },
+              "activeMembers24h": { "type": "integer" },
+              "activeMembers7d": { "type": "integer" }
+            }
+          }
+        }
+      },
+      "TopChannelItem": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "type": { "type": "string", "enum": ["text", "voice"] },
+          "value": { "type": "integer" }
+        }
+      },
+      "TopMemberItem": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "username": { "type": "string" },
+          "discriminator": { "type": "string" },
+          "avatar": { "type": "string" },
+          "messages": { "type": "integer" },
+          "voiceMinutes": { "type": "integer" }
+        }
+      },
+      "RoleDistributionItem": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "color": { "type": "string" },
+          "count": { "type": "integer" }
+        }
+      },
+      "TopCommandItem": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "usageCount": { "type": "integer" },
+          "lastUsedAt": { "type": "string" },
+          "category": { "type": "string" }
+        }
+      },
+      "CombinedAnalyticsResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "object",
+            "properties": {
+              "timeSeries": {
+                "type": "array",
+                "items": { "$ref": "#/components/schemas/ActivityChartPoint" }
+              },
+              "heatmap": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "dayOfWeek": { "type": "integer" },
+                    "hour": { "type": "integer" },
+                    "value": { "type": "integer" }
+                  }
+                }
+              },
+              "summary": {
+                "type": "object",
+                "properties": {
+                  "totalMessages": { "type": "integer" },
+                  "totalMembers": { "type": "integer" },
+                  "totalVoiceMinutes": { "type": "integer" },
+                  "averageMessagesPerDay": { "type": "number" },
+                  "averageMembersPerDay": { "type": "number" }
+                }
+              },
+              "topChannels": {
+                "type": "object",
+                "properties": {
+                  "messages": {
+                    "type": "array",
+                    "items": { "$ref": "#/components/schemas/TopChannelItem" }
+                  },
+                  "voice": {
+                    "type": "array",
+                    "items": { "$ref": "#/components/schemas/TopChannelItem" }
+                  }
+                }
+              },
+              "topMembers": {
+                "type": "array",
+                "items": { "$ref": "#/components/schemas/TopMemberItem" }
+              },
+              "roleDistribution": {
+                "type": "array",
+                "items": { "$ref": "#/components/schemas/RoleDistributionItem" }
+              },
+              "topCommands": {
+                "type": "array",
+                "items": { "$ref": "#/components/schemas/TopCommandItem" }
+              }
+            }
+          }
+        }
       }
     }
   }

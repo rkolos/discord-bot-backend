@@ -7,7 +7,7 @@ import { Queue } from 'bullmq';
 import { EmbedBuilder } from 'discord.js';
 import { randomUUID } from 'crypto';
 import { AppDataSource } from '@app/shared';
-import { GuildLogSetting, Counter, CounterMetric } from '@app/shared';
+import { Guild, GuildLogSetting, Counter, CounterMetric } from '@app/shared';
 import { buildLogEmbedData } from '@app/shared';
 import {
   COUNTERS_UPDATE_QUEUE_NAME,
@@ -35,7 +35,12 @@ export interface ShardEventHandlersOptions {
 
 type GuildMemberLike = { guild: { id: string; memberCount?: number }; user?: { id: string; tag?: string } };
 type MessageLike = { id?: string; channelId?: string; channel?: { name?: string; guild?: { id: string } }; author?: { id: string; tag?: string }; content?: string };
-type VoiceStateLike = { guild: { id: string }; channelId: string | null; channel?: { name?: string } | null; member?: { user: { id: string; tag?: string } } };
+type VoiceStateLike = {
+  guild: { id: string };
+  channelId: string | null;
+  channel?: { id?: string; name?: string } | null;
+  member?: { user: { id: string; tag?: string } };
+};
 type GuildMemberUpdateLike = { guild: { id: string }; roles: { cache: Map<string, { name: string }> }; user: { id: string; tag?: string } };
 
 export function createShardEventHandlers(options: ShardEventHandlersOptions) {
@@ -94,8 +99,25 @@ export function createShardEventHandlers(options: ShardEventHandlersOptions) {
     eventType: string,
     payload: Record<string, unknown>,
     embedPayload: Parameters<typeof buildLogEmbedData>[1],
+    rawPayloadOverrides?: Partial<RawEventJobPayload>,
   ): Promise<void> {
     if (!guildId) return;
+    const rawPayload: RawEventJobPayload = {
+      eventId: randomUUID(),
+      eventType,
+      eventTime: new Date().toISOString(),
+      guildId,
+      discordGuildId,
+      payload,
+      ...rawPayloadOverrides,
+    };
+
+    if (eventType === 'voice_change') {
+      await rawEventsQueue.add(eventType, rawPayload, { priority: 0 }).catch((err) => {
+        console.error(`[shard-events] raw-events enqueue error: ${(err as Error).message}`);
+      });
+    }
+
     const settings = await getLogSettings(guildId);
     const setting = settings.get(eventType);
     if (!setting?.enabled || !setting.channelId) return;
@@ -109,23 +131,27 @@ export function createShardEventHandlers(options: ShardEventHandlersOptions) {
       console.error(`[shard-events] send log error: ${(err as Error).message}`);
     });
 
-    const rawPayload: RawEventJobPayload = {
-      eventId: randomUUID(),
-      eventType,
-      eventTime: new Date().toISOString(),
-      guildId,
-      discordGuildId,
-      payload,
-    };
-    await rawEventsQueue.add(eventType, rawPayload, { priority: 0 }).catch((err) => {
-      console.error(`[shard-events] raw-events enqueue error: ${(err as Error).message}`);
-    });
+    if (eventType !== 'voice_change') {
+      await rawEventsQueue.add(eventType, rawPayload, { priority: 0 }).catch((err) => {
+        console.error(`[shard-events] raw-events enqueue error: ${(err as Error).message}`);
+      });
+    }
+  }
+
+  async function touchGuildLastActivity(discordGuildId: string): Promise<void> {
+    const guildRepo = AppDataSource.getRepository(Guild);
+    await guildRepo
+      .update({ discordGuildId }, { lastActivity: new Date() })
+      .catch(() => {});
   }
 
   async function updateMemberCountAndCounters(discordGuildId: string, guildId: string | null, memberCount: number): Promise<void> {
     if (!guildId) return;
     const key = `${redisPrefix}${MEMBER_COUNT_CACHE_PREFIX}${guildId}${MEMBER_COUNT_SUFFIX}`;
     await redis.set(key, String(memberCount)).catch(() => {});
+
+    const guildRepo = AppDataSource.getRepository(Guild);
+    await guildRepo.update({ discordGuildId }, { memberCount }).catch(() => {});
 
     const counterRepo = AppDataSource.getRepository(Counter);
     const counters = await counterRepo.find({
@@ -150,6 +176,7 @@ export function createShardEventHandlers(options: ShardEventHandlersOptions) {
       const memberCount = member.guild.memberCount ?? 0;
 
       await updateMemberCountAndCounters(discordGuildId, guildId, memberCount);
+      if (guildId) touchGuildLastActivity(discordGuildId).catch(() => {});
 
       await sendLogAndIngest(
         discordGuildId,
@@ -170,6 +197,7 @@ export function createShardEventHandlers(options: ShardEventHandlersOptions) {
       const memberCount = typeof member.guild.memberCount === 'number' ? member.guild.memberCount : 0;
 
       await updateMemberCountAndCounters(discordGuildId, guildId, memberCount);
+      if (guildId) touchGuildLastActivity(discordGuildId).catch(() => {});
 
       await sendLogAndIngest(
         discordGuildId,
@@ -189,6 +217,7 @@ export function createShardEventHandlers(options: ShardEventHandlersOptions) {
       const discordGuildId = channel?.guild?.id;
       if (!discordGuildId) return;
       const guildId = await getGuildId(discordGuildId);
+      if (guildId) touchGuildLastActivity(discordGuildId).catch(() => {});
 
       await sendLogAndIngest(
         discordGuildId,
@@ -210,6 +239,7 @@ export function createShardEventHandlers(options: ShardEventHandlersOptions) {
       const discordGuildId = channel?.guild?.id;
       if (!discordGuildId) return;
       const guildId = await getGuildId(discordGuildId);
+      if (guildId) touchGuildLastActivity(discordGuildId).catch(() => {});
 
       await sendLogAndIngest(
         discordGuildId,
@@ -230,19 +260,34 @@ export function createShardEventHandlers(options: ShardEventHandlersOptions) {
     async onVoiceStateUpdate(oldState: VoiceStateLike, newState: VoiceStateLike): Promise<void> {
       const discordGuildId = oldState.guild.id;
       const guildId = await getGuildId(discordGuildId);
+      if (guildId) touchGuildLastActivity(discordGuildId).catch(() => {});
+
       const voiceChannelName = (newState.channel ?? oldState.channel)?.name ?? undefined;
+      const discordUserId = (newState.member ?? oldState.member)?.user?.id;
+      const channelId =
+        (newState.channel ?? oldState.channel)?.id ??
+        newState.channelId ??
+        oldState.channelId ??
+        null;
 
       await sendLogAndIngest(
         discordGuildId,
         guildId,
         'voice_change',
-        { userId: oldState.member?.user?.id },
         {
-          userTag: oldState.member?.user?.tag ?? undefined,
-          userId: oldState.member?.user?.id ?? undefined,
+          userId: discordUserId,
+          userTag: (newState.member ?? oldState.member)?.user?.tag,
+          voiceChannelName,
+          channelId: channelId ?? undefined,
+          timestamp: new Date().toISOString(),
+        },
+        {
+          userTag: (newState.member ?? oldState.member)?.user?.tag ?? undefined,
+          userId: discordUserId ?? undefined,
           voiceChannelName,
           timestamp: new Date().toISOString(),
         },
+        { discordUserId: discordUserId ?? undefined, channelId: channelId ?? undefined },
       );
     },
 

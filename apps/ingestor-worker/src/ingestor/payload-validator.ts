@@ -44,7 +44,8 @@ export function validatePayloadByEventType(
       return { valid: true };
     }
 
-    case 'VOICE_STATE_UPDATE': {
+    case 'VOICE_STATE_UPDATE':
+    case 'voice_change': {
       return { valid: true };
     }
 

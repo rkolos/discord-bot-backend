@@ -25,6 +25,10 @@ export interface FirstContactPayload {
   discordOwnerId: string;
 }
 
+export interface SyncedGuildPayload {
+  syncedGuildId: string;
+}
+
 export interface SyncOnGuildDeleteOptions {
   discordGuildId: string;
 }
@@ -52,13 +56,13 @@ export async function syncOnReady(
 }
 
 /**
- * Обновление БД при GUILD_CREATE: если гильдия есть в БД — обновляем is_bot_in_guild, shard_id, server_settings.
- * Если гильдии нет — возвращает FirstContactPayload для постановки задачи guild:setup.
+ * Обновление БД при GUILD_CREATE: если гильдия есть в БД — обновляем is_bot_in_guild, shard_id, server_settings
+ * и возвращаем syncedGuildId для вызова syncGuild. Если гильдии нет — возвращает FirstContactPayload для guild:setup.
  */
 export async function syncOnGuildCreate(
   manager: EntityManager,
   options: SyncOnGuildCreateOptions,
-): Promise<FirstContactPayload | null> {
+): Promise<FirstContactPayload | SyncedGuildPayload | null> {
   const { discordGuildId, guildName, shardId, discordOwnerId } = options;
 
   const guild = await manager.findOne(Guild, {
@@ -89,7 +93,7 @@ export async function syncOnGuildCreate(
   console.log(
     `[guild-sync] GUILD_CREATE: updated guild in DB (discordGuildId=${discordGuildId}, guildId=${guild.id}, isBotInGuild=true)`,
   );
-  return null;
+  return { syncedGuildId: guild.id };
 }
 
 /**

@@ -102,6 +102,7 @@ describe('Frontend API E2E (validation contract)', () => {
     const { AppModule } = await import('../src/app.module');
     const { BadRequestException, ValidationPipe } = await import('@nestjs/common');
     const { HttpAdapterHost } = await import('@nestjs/core');
+    const { SwaggerModule, DocumentBuilder } = await import('@nestjs/swagger');
 
     const moduleFixture = await Test.createTestingModule({
       imports: [AppModule],
@@ -131,7 +132,6 @@ describe('Frontend API E2E (validation contract)', () => {
   afterAll(async () => {
     await app?.close();
     if (ds?.isInitialized) await ds.destroy();
-    await chContainer?.stop();
     await redisContainer?.stop();
     await pgContainer?.stop();
   }, 30_000);

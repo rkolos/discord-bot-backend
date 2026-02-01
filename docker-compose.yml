@@ -72,7 +72,7 @@ services:
       - /app/node_modules
     ports:
       - "3001:3001"
-    command: npm run start:dev -- frontend-api
+    command: npm run ${NEST_START_CMD:-start:dev} -- frontend-api
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
@@ -101,7 +101,7 @@ services:
       - /app/node_modules
     ports:
       - "3002:3002"
-    command: npm run start:dev -- admin-api
+    command: npm run ${NEST_START_CMD:-start:dev} -- admin-api
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
@@ -125,7 +125,7 @@ services:
     volumes:
       - .:/app
       - /app/node_modules
-    command: npm run start:dev -- bot-service
+    command: npm run ${NEST_START_CMD:-start:dev} -- bot-service
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
@@ -149,7 +149,7 @@ services:
     volumes:
       - .:/app
       - /app/node_modules
-    command: npm run start:dev -- ingestor-worker
+    command: npm run ${NEST_START_CMD:-start:dev} -- ingestor-worker
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
@@ -172,7 +172,7 @@ services:
     volumes:
       - .:/app
       - /app/node_modules
-    command: npm run start:dev -- background-worker
+    command: npm run ${NEST_START_CMD:-start:dev} -- background-worker
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }

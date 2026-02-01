@@ -136,7 +136,12 @@ export class CountersConsumerService implements OnModuleInit, OnModuleDestroy {
         const n = parseInt(raw, 10);
         if (!Number.isNaN(n)) return n;
       }
-      return 0;
+      // Fallback: guild.memberCount from DB (populated by guild-sync or member events)
+      const guild = await this.guildRepository.findOne({
+        where: { id: guildId },
+        select: ['memberCount'],
+      });
+      return guild?.memberCount ?? 0;
     }
     if (metric === CounterMetric.MESSAGES) {
       try {

@@ -167,7 +167,17 @@ export class AnalyticsService {
     this.validateDateRange(from, to);
     this.validatePlanPeriod(guild.subscriptionTier, from, to);
     const timezone = await this.resolveTimezone(discordGuildId, timezoneOptions);
-    const [timeSeries, topMembers, _overview] = await Promise.all([
+    const [
+      timeSeries,
+      topMembers,
+      topCommands,
+      topChannelsMessages,
+      topChannelsVoice,
+      roleDistribution,
+      channelsMap,
+      rolesMap,
+      _overview,
+    ] = await Promise.all([
       this.sharedAnalytics.getActivityChartByGuildId(
         guild.id,
         from,
@@ -175,6 +185,12 @@ export class AnalyticsService {
         timezone,
       ),
       this.sharedAnalytics.getTopMembersByGuildId(guild.id, 'messages', 20),
+      this.sharedAnalytics.getTopCommandsByGuildId(guild.id, from, to, 10),
+      this.sharedAnalytics.getTopChannelsByMessages(guild.id, from, to, 10),
+      this.sharedAnalytics.getTopChannelsByVoice(guild.id, from, to, 10),
+      this.sharedAnalytics.getRoleDistributionByGuildId(guild.id, from, to),
+      this.guildsService.getChannelsWithTypeForGuild(discordGuildId),
+      this.guildsService.getRolesForGuild(discordGuildId),
       this.sharedAnalytics.getOverviewByGuildId(guild.id, timezone),
     ]);
     const heatmap = await this.getHeatmap(discordGuildId);
@@ -192,10 +208,37 @@ export class AnalyticsService {
         averageMessagesPerDay: totalMessages / days,
         averageMembersPerDay: totalMembers / days,
       },
-      topChannels: { messages: [], voice: [] },
+      topChannels: {
+        messages: topChannelsMessages.map((ch) => {
+          const meta = channelsMap.find((c) => c.id === ch.id);
+          return {
+            id: ch.id,
+            name: meta?.name ?? ch.id,
+            type: meta?.type ?? 'text',
+            value: ch.value,
+          };
+        }),
+        voice: topChannelsVoice.map((ch) => {
+          const meta = channelsMap.find((c) => c.id === ch.id);
+          return {
+            id: ch.id,
+            name: meta?.name ?? ch.id,
+            type: meta?.type ?? 'voice',
+            value: ch.value,
+          };
+        }),
+      },
       topMembers,
-      roleDistribution: [],
-      topCommands: [],
+      roleDistribution: roleDistribution.map((r) => {
+        const meta = rolesMap.find((m) => m.id === r.id);
+        return {
+          id: r.id,
+          name: meta?.name ?? r.id,
+          color: meta?.color ?? '',
+          count: r.count,
+        };
+      }),
+      topCommands,
     };
   }
 

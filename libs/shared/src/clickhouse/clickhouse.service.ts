@@ -238,5 +238,37 @@ export class ClickHouseService implements OnModuleInit {
       GROUP BY guild_id, user_id, event_date
     `;
     await this.exec({ query: mvTopMembers });
+
+    const mvTopChannelsMessages = `
+      CREATE MATERIALIZED VIEW IF NOT EXISTS ${database}.mv_top_channels_messages
+      ENGINE = SummingMergeTree
+      PARTITION BY toStartOfWeek(event_date)
+      ORDER BY (guild_id, channel_id, event_date)
+      AS SELECT
+        guild_id,
+        channel_id,
+        event_date,
+        count() AS messages_count
+      FROM ${tableRawEvents}
+      WHERE event_type = 'MESSAGE_CREATE' AND channel_id != ''
+      GROUP BY guild_id, channel_id, event_date
+    `;
+    await this.exec({ query: mvTopChannelsMessages });
+
+    const mvTopChannelsVoice = `
+      CREATE MATERIALIZED VIEW IF NOT EXISTS ${database}.mv_top_channels_voice
+      ENGINE = SummingMergeTree
+      PARTITION BY toStartOfWeek(event_date)
+      ORDER BY (guild_id, channel_id, event_date)
+      AS SELECT
+        guild_id,
+        channel_id,
+        event_date,
+        sum(toUInt64(JSONExtractInt(payload, 'voiceMinutes'))) AS voice_minutes
+      FROM ${tableRawEvents}
+      WHERE event_type = 'VOICE_STATE_UPDATE' AND channel_id != ''
+      GROUP BY guild_id, channel_id, event_date
+    `;
+    await this.exec({ query: mvTopChannelsVoice });
   }
 }

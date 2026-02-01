@@ -20,5 +20,6 @@ import { GuildSyncInternalService } from './guild-sync-internal.service';
     InternalGuildSyncController,
   ],
   providers: [GuildSyncInternalService],
+  exports: [GuildSyncInternalService],
 })
 export class InternalModule {}

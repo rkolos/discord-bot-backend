@@ -21,6 +21,7 @@ const SYNC_LOCK_TTL_SEC = 120;
 interface DiscordGuildResponse {
   name?: string;
   icon?: string | null;
+  banner?: string | null;
   approximate_member_count?: number;
   approximate_presence_count?: number;
 }
@@ -74,6 +75,9 @@ export class GuildSyncInternalService {
       guild.iconUrl = discordData.icon
         ? `https://cdn.discordapp.com/icons/${guild.discordGuildId}/${discordData.icon}.png`
         : guild.iconUrl;
+      guild.banner = discordData.banner
+        ? `https://cdn.discordapp.com/banners/${guild.discordGuildId}/${discordData.banner}.png`
+        : guild.banner;
       guild.memberCount = discordData.approximate_member_count ?? guild.memberCount;
       guild.onlineMembers =
         discordData.approximate_presence_count ?? guild.onlineMembers ?? null;
