@@ -8,6 +8,8 @@ export * from './database/database.module';
 export { AppDataSource } from './database/data-source';
 export * from './database/entities';
 export * from './filters';
+export * from './guild-setup';
+export * from './history-sync';
 export * from './logs';
 export * from './plan-tiers';
 export * from './pipes';

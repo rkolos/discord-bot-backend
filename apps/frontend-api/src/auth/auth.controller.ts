@@ -6,6 +6,7 @@ import {
   Query,
   HttpCode,
   HttpStatus,
+  ConflictException,
   ForbiddenException,
   Res,
   Req,
@@ -24,6 +25,7 @@ import {
   LoginDto,
 } from './dto';
 import { SharedConfigService } from '@app/shared';
+import { GuildsService } from '../guilds/guilds.service';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { CurrentUser } from './decorators/current-user.decorator';
 import { User } from '@app/shared';
@@ -40,6 +42,7 @@ export class AuthController {
     private readonly discordOAuth: DiscordOAuthService,
     private readonly authService: AuthService,
     private readonly sharedConfig: SharedConfigService,
+    private readonly guildsService: GuildsService,
   ) {}
 
   @Get('discord')
@@ -70,6 +73,24 @@ export class AuthController {
     res.redirect(302, url);
   }
 
+  @Get('discord/add-bot')
+  @ApiOperation({
+    summary: 'Redirect to Discord Add Bot',
+    description:
+      'Redirects the user to Discord bot install page. Use when adding bot to server. Requires redirect_uri (frontend callback, e.g. {origin}/add-bot/callback). Optional permissions. Returns 302 redirect.',
+  })
+  async discordAddBot(
+    @Query('redirect_uri') redirectUriFromQuery: string | undefined,
+    @Query('permissions') permissions: string | undefined,
+    @Res() res: Response,
+  ): Promise<void> {
+    const { url } = await this.discordOAuth.buildBotInstallUrl(
+      redirectUriFromQuery,
+      permissions ?? '8',
+    );
+    res.redirect(302, url);
+  }
+
   @Get('discord/callback')
   @ApiOperation({
     summary: 'Discord OAuth callback (GET)',
@@ -79,6 +100,7 @@ export class AuthController {
   async discordCallbackGet(
     @Query('code') code: string | undefined,
     @Query('state') state: string | undefined,
+    @Query('guild_id') discordGuildId: string | undefined,
     @Res() res: Response,
   ): Promise<void> {
     const errorRedirectUrl =
@@ -140,18 +162,51 @@ export class AuthController {
         maxAge: COOKIE_MAX_AGE_SECONDS * 1000,
         expires: expiresAt,
       });
+      const defaultCallbackPath = stateData.isBotInstall
+        ? '/add-bot/callback'
+        : '/login/callback';
       const frontendRedirect =
         stateData.redirectUri ??
         (this.sharedConfig.discord.frontendBaseUrl != null
-          ? `${this.sharedConfig.discord.frontendBaseUrl}/login/callback`
-          : '/login/callback');
+          ? `${this.sharedConfig.discord.frontendBaseUrl}${defaultCallbackPath}`
+          : defaultCallbackPath);
       const separator = frontendRedirect.includes('?') ? '&' : '?';
-      res.redirect(302, `${frontendRedirect}${separator}token=${accessToken}`);
+      let redirectUrl = `${frontendRedirect}${separator}token=${accessToken}`;
+      if (
+        stateData.isBotInstall &&
+        discordGuildId &&
+        discordGuildId.trim().length > 0
+      ) {
+        try {
+          const { guildId } = await this.guildsService.onboardGuild(
+            discordGuildId,
+            user.id,
+          );
+          redirectUrl += `&guildId=${encodeURIComponent(guildId)}`;
+        } catch (err) {
+          if (err instanceof ConflictException) {
+            const guild = await this.guildsService.findGuildByDiscordId(
+              discordGuildId,
+            );
+            if (guild) {
+              redirectUrl += `&guildId=${encodeURIComponent(guild.id)}`;
+            } else {
+              redirectUrl += `&error=GUILD_ONBOARD_FAILED`;
+            }
+          } else {
+            redirectUrl += `&error=GUILD_ONBOARD_FAILED`;
+          }
+        }
+      }
+      res.redirect(302, redirectUrl);
     } catch {
+      const defaultErrorPath = stateData.isBotInstall
+        ? '/add-bot/callback'
+        : '/login/callback';
       const targetUrl =
         stateData.redirectUri ??
         (this.sharedConfig.discord.frontendBaseUrl != null
-          ? `${this.sharedConfig.discord.frontendBaseUrl}/login/callback`
+          ? `${this.sharedConfig.discord.frontendBaseUrl}${defaultErrorPath}`
           : null);
       if (targetUrl) {
         const separator = targetUrl.includes('?') ? '&' : '?';

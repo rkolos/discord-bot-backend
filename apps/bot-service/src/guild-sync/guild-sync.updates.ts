@@ -15,6 +15,14 @@ export interface SyncOnGuildCreateOptions {
   discordGuildId: string;
   guildName: string;
   shardId: number;
+  /** Discord Snowflake ID владельца гильдии (для First Contact). */
+  discordOwnerId?: string;
+}
+
+export interface FirstContactPayload {
+  discordGuildId: string;
+  guildName: string;
+  discordOwnerId: string;
 }
 
 export interface SyncOnGuildDeleteOptions {
@@ -45,18 +53,25 @@ export async function syncOnReady(
 
 /**
  * Обновление БД при GUILD_CREATE: если гильдия есть в БД — обновляем is_bot_in_guild, shard_id, server_settings.
+ * Если гильдии нет — возвращает FirstContactPayload для постановки задачи guild:setup.
  */
 export async function syncOnGuildCreate(
   manager: EntityManager,
   options: SyncOnGuildCreateOptions,
-): Promise<void> {
-  const { discordGuildId, shardId } = options;
+): Promise<FirstContactPayload | null> {
+  const { discordGuildId, guildName, shardId, discordOwnerId } = options;
 
   const guild = await manager.findOne(Guild, {
     where: { discordGuildId },
   });
   if (!guild) {
-    return;
+    console.log(
+      `[guild-sync] GUILD_CREATE: guild not in DB (discordGuildId=${discordGuildId}, name=${guildName}). Enqueueing guild:setup.`,
+    );
+    if (discordOwnerId) {
+      return { discordGuildId, guildName, discordOwnerId };
+    }
+    return null;
   }
 
   guild.isBotInGuild = true;
@@ -71,6 +86,10 @@ export async function syncOnGuildCreate(
     settings.lastConnected = new Date();
     await manager.save(ServerSettings, settings);
   }
+  console.log(
+    `[guild-sync] GUILD_CREATE: updated guild in DB (discordGuildId=${discordGuildId}, guildId=${guild.id}, isBotInGuild=true)`,
+  );
+  return null;
 }
 
 /**

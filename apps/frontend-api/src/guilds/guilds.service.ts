@@ -3,6 +3,7 @@ import {
   HttpException,
   HttpStatus,
   Injectable,
+  Logger,
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -21,6 +22,7 @@ import {
 import { CryptoService, RedisService } from '@app/shared';
 import { SharedConfigService } from '@app/shared';
 import { DiscordOAuthService } from '../auth/discord-oauth.service';
+import { HistorySyncQueueService } from './history-sync-queue.service';
 import { UserGuildDto } from './dto/user-guild.dto';
 import {
   ALLOWED_MODULE_KEYS,
@@ -83,6 +85,8 @@ export interface GuildChannelDto {
 
 @Injectable()
 export class GuildsService {
+  private readonly logger = new Logger(GuildsService.name);
+
   constructor(
     private readonly discordOAuth: DiscordOAuthService,
     private readonly httpService: HttpService,
@@ -97,6 +101,7 @@ export class GuildsService {
     private readonly guildModuleRepository: Repository<GuildModule>,
     @InjectRepository(CompanyMember)
     private readonly companyMemberRepository: Repository<CompanyMember>,
+    private readonly historySyncQueue: HistorySyncQueueService,
   ) {}
 
   async getMeGuildsPaginated(
@@ -606,14 +611,19 @@ export class GuildsService {
     ownerUserId: string,
     name?: string,
   ): Promise<{ guildId: string }> {
+    this.logger.log(
+      `onboardGuild called: discordGuildId=${discordGuildId} ownerUserId=${ownerUserId} name=${name ?? '(none)'}`,
+    );
     const existing = await this.guildRepository.findOne({
       where: { discordGuildId },
     });
     if (existing) {
-      throw new ConflictException({
-        code: 'GUILD_ALREADY_EXISTS',
-        message: 'Guild already onboarded',
-      });
+      existing.ownerId = ownerUserId;
+      await this.guildRepository.save(existing);
+      this.logger.log(
+        `onboardGuild: guild already existed (e.g. from guild:setup), updated owner to ${ownerUserId}`,
+      );
+      return { guildId: existing.id };
     }
 
     const serverName = name ?? DEFAULT_GUILD_NAME;
@@ -653,6 +663,10 @@ export class GuildsService {
       allowPublicWidgets: true,
     });
     await this.serverSettingsRepository.save(settings);
+
+    await this.historySyncQueue
+      .addHistorySync({ guildId: savedGuild.id, discordGuildId })
+      .catch(() => {});
 
     return { guildId: savedGuild.id };
   }

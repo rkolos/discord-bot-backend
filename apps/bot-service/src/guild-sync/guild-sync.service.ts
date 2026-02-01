@@ -11,12 +11,14 @@ import {
   syncOnGuildCreate,
   syncOnGuildDelete,
 } from './guild-sync.updates';
+import { GuildSetupQueueProducerService } from '../guild-setup-queue-producer/guild-setup-queue-producer.service';
 
 @Injectable()
 export class GuildSyncService {
   constructor(
     @InjectEntityManager()
     private readonly manager: EntityManager,
+    private readonly guildSetupQueue: GuildSetupQueueProducerService,
   ) {}
 
   async onReady(options: SyncOnReadyOptions): Promise<void> {
@@ -24,7 +26,10 @@ export class GuildSyncService {
   }
 
   async onGuildCreate(options: SyncOnGuildCreateOptions): Promise<void> {
-    return syncOnGuildCreate(this.manager, options);
+    const firstContact = await syncOnGuildCreate(this.manager, options);
+    if (firstContact) {
+      await this.guildSetupQueue.addGuildSetup(firstContact).catch(() => {});
+    }
   }
 
   async onGuildDelete(options: SyncOnGuildDeleteOptions): Promise<void> {

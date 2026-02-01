@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { TypeOrmModule } from '@nestjs/typeorm';
@@ -11,6 +11,7 @@ import {
 } from '@app/shared';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
+import { GuildsModule } from '../guilds/guilds.module';
 import { DiscordOAuthService } from './discord-oauth.service';
 import { PasswordService } from './password.service';
 import { JwtStrategy } from './jwt.strategy';
@@ -31,6 +32,7 @@ import { JwtStrategy } from './jwt.strategy';
       timeout: 10000,
       maxRedirects: 0,
     }),
+    forwardRef(() => GuildsModule),
   ],
   controllers: [AuthController],
   providers: [AuthService, DiscordOAuthService, PasswordService, JwtStrategy],

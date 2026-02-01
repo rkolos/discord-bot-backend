@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { HttpModule } from '@nestjs/axios';
 import { CryptoModule } from '@app/shared';
@@ -6,6 +6,7 @@ import { Guild, GuildModule, ServerSettings, CompanyMember } from '@app/shared';
 import { AuthModule } from '../auth/auth.module';
 import { GuildsController } from './guilds.controller';
 import { GuildsService } from './guilds.service';
+import { HistorySyncQueueService } from './history-sync-queue.service';
 import { GuildAdminGuard } from './guards/guild-admin.guard';
 
 @Module({
@@ -16,10 +17,10 @@ import { GuildAdminGuard } from './guards/guild-admin.guard';
       maxRedirects: 0,
     }),
     CryptoModule,
-    AuthModule,
+    forwardRef(() => AuthModule),
   ],
   controllers: [GuildsController],
-  providers: [GuildsService, GuildAdminGuard],
+  providers: [GuildsService, GuildAdminGuard, HistorySyncQueueService],
   exports: [GuildsService, GuildAdminGuard],
 })
 export class GuildsModule {}

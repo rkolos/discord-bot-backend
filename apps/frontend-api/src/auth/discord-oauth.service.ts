@@ -13,12 +13,14 @@ import { RedisService } from '@app/shared';
 const DISCORD_API_BASE = 'https://discord.com/api/v10';
 const OAUTH_AUTHORIZE_URL = 'https://discord.com/api/oauth2/authorize';
 const SCOPES = ['identify', 'email', 'guilds'];
+const BOT_INSTALL_SCOPES = ['bot', 'applications.commands', 'identify'];
 const STATE_REDIS_KEY_PREFIX = 'frontend-api:auth:discord:state:';
 const DISCORD_TOKEN_REDIS_KEY_PREFIX = 'frontend-api:auth:discord-token:';
 const STATE_TTL_SECONDS = 600;
 
 export interface DiscordStateData {
   redirectUri: string | null;
+  isBotInstall?: boolean;
 }
 
 export interface DiscordTokenResponse {
@@ -83,6 +85,57 @@ export class DiscordOAuthService {
       redirect_uri: oauthRedirectUri,
       response_type: 'code',
       scope: SCOPES.join(' '),
+      state,
+    });
+    const url = `${OAUTH_AUTHORIZE_URL}?${params.toString()}`;
+    return { state, url };
+  }
+
+  async buildBotInstallUrl(
+    frontendRedirectUri?: string,
+    permissions = '8',
+  ): Promise<{ state: string; url: string }> {
+    const { clientId, oauthRedirectUri, frontendBaseUrl } =
+      this.sharedConfig.discord;
+    if (frontendRedirectUri != null && frontendBaseUrl != null) {
+      try {
+        const parsed = new URL(frontendRedirectUri);
+        const allowedBase = new URL(frontendBaseUrl);
+        const expectedPath = '/add-bot/callback';
+        const normalizedPath = parsed.pathname.replace(/\/$/, '') || '/';
+        if (
+          parsed.origin !== allowedBase.origin ||
+          normalizedPath !== expectedPath
+        ) {
+          throw new BadRequestException({
+            code: 'VALIDATION_ERROR',
+            message:
+              'redirect_uri must be {FRONTEND_BASE_URL}/add-bot/callback',
+            details: { redirect_uri: 'Invalid redirect_uri' },
+          });
+        }
+      } catch (err) {
+        if (err instanceof BadRequestException) throw err;
+        throw new BadRequestException({
+          code: 'VALIDATION_ERROR',
+          message: 'redirect_uri must be a valid URL',
+          details: { redirect_uri: 'Invalid redirect_uri' },
+        });
+      }
+    }
+    const state = randomBytes(32).toString('hex');
+    const key = STATE_REDIS_KEY_PREFIX + state;
+    const stateData: DiscordStateData = {
+      redirectUri: frontendRedirectUri ?? null,
+      isBotInstall: true,
+    };
+    await this.redis.set(key, JSON.stringify(stateData), STATE_TTL_SECONDS);
+    const params = new URLSearchParams({
+      client_id: clientId,
+      redirect_uri: oauthRedirectUri,
+      response_type: 'code',
+      scope: BOT_INSTALL_SCOPES.join(' '),
+      permissions,
       state,
     });
     const url = `${OAUTH_AUTHORIZE_URL}?${params.toString()}`;

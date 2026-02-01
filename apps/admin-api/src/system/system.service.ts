@@ -19,6 +19,8 @@ const KNOWN_QUEUE_NAMES = [
   'ingestor-raw-events',
   'workers-queue-gdpr-user-delete',
   'workers-queue-logs-config',
+  'workers-queue-history-sync',
+  'workers-queue-guild-setup',
 ];
 
 const SHARD_KEY_PREFIX = 'bot-service:shard:';

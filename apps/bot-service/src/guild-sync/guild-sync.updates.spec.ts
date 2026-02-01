@@ -65,19 +65,33 @@ describe('guild-sync.updates', () => {
   });
 
   describe('syncOnGuildCreate', () => {
-    it('does nothing when guild not in DB', async () => {
+    it('returns FirstContactPayload when guild not in DB and discordOwnerId provided', async () => {
       (manager.findOne as jest.Mock).mockResolvedValue(null);
 
-      await syncOnGuildCreate(manager as unknown as EntityManager, {
+      const result = await syncOnGuildCreate(manager as unknown as EntityManager, {
         discordGuildId: '123',
         guildName: 'Test',
         shardId: 0,
+        discordOwnerId: '999',
       });
 
       expect(manager.findOne).toHaveBeenCalledWith(Guild, {
         where: { discordGuildId: '123' },
       });
       expect(manager.save).not.toHaveBeenCalled();
+      expect(result).toEqual({ discordGuildId: '123', guildName: 'Test', discordOwnerId: '999' });
+    });
+
+    it('returns null when guild not in DB and discordOwnerId not provided', async () => {
+      (manager.findOne as jest.Mock).mockResolvedValue(null);
+
+      const result = await syncOnGuildCreate(manager as unknown as EntityManager, {
+        discordGuildId: '123',
+        guildName: 'Test',
+        shardId: 0,
+      });
+
+      expect(result).toBeNull();
     });
 
     it('updates guild and server_settings when guild exists', async () => {
@@ -96,12 +110,13 @@ describe('guild-sync.updates', () => {
         .mockResolvedValueOnce(guild)
         .mockResolvedValueOnce(settings);
 
-      await syncOnGuildCreate(manager as unknown as EntityManager, {
+      const result = await syncOnGuildCreate(manager as unknown as EntityManager, {
         discordGuildId: '123',
         guildName: 'Test',
         shardId: 1,
       });
 
+      expect(result).toBeNull();
       expect(guild.isBotInGuild).toBe(true);
       expect(guild.shardId).toBe(1);
       expect(settings.botConnected).toBe(true);

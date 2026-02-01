@@ -41,7 +41,14 @@ export const envValidationSchema = Joi.object({
   DISCORD_OAUTH_REDIRECT_URI: Joi.string().uri().required(),
   FRONTEND_BASE_URL: Joi.string().uri().optional(),
 
+  // Bot token (bot-service, ingestor-worker для Guild Setup и History Sync)
+  DISCORD_BOT_TOKEN: Joi.string().optional(),
+
   // Ingestor Worker (optional; used only by ingestor-worker)
   INGESTOR_BATCH_SIZE: Joi.number().min(500).max(1000).optional(),
   INGESTOR_BATCH_INTERVAL_MS: Joi.number().min(1000).optional(),
+
+  // History Sync (optional; used by ingestor-worker)
+  HISTORY_SCAN_DEPTH: Joi.number().min(100).max(1000).optional(),
+  HISTORY_CONCURRENCY: Joi.number().min(1).max(10).optional(),
 });

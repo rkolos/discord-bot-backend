@@ -7,6 +7,7 @@ import type {
   IDiscordConfig,
   IIngestorConfig,
   IRedisConfig,
+  IHistorySyncConfig,
 } from './shared-config.interfaces';
 
 const NODE_ENV_TO_PREFIX: Record<string, string> = {
@@ -91,6 +92,15 @@ export class SharedConfigService {
       batchSize: this.configService.get<number>('INGESTOR_BATCH_SIZE') ?? 1000,
       batchIntervalMs:
         this.configService.get<number>('INGESTOR_BATCH_INTERVAL_MS') ?? 5000,
+    };
+  }
+
+  get historySync(): IHistorySyncConfig {
+    return {
+      scanDepth:
+        this.configService.get<number>('HISTORY_SCAN_DEPTH') ?? 100,
+      concurrency:
+        this.configService.get<number>('HISTORY_CONCURRENCY') ?? 2,
     };
   }
 }

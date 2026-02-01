@@ -84,6 +84,56 @@ function envPrefix(): string {
   return map[nodeEnv] ?? 'dev';
 }
 
+async function runClickHouseMigrations(ch: ClickHouseClient): Promise<void> {
+  const db = process.env['CLICKHOUSE_DB'] ?? 'default';
+  const tableRawEvents = `${db}.raw_events`;
+
+  await ch.command({
+    query: `
+      CREATE TABLE IF NOT EXISTS ${tableRawEvents}
+      (
+        event_id UUID,
+        event_time DateTime,
+        event_date Date DEFAULT toDate(event_time),
+        event_type LowCardinality(String) DEFAULT '',
+        guild_id UUID,
+        discord_guild_id String DEFAULT '',
+        user_id Nullable(UUID),
+        discord_user_id String DEFAULT '',
+        anonymized_hash Nullable(String),
+        channel_id String DEFAULT '',
+        role_id String DEFAULT '',
+        command_name String DEFAULT '',
+        plan_tier LowCardinality(String) DEFAULT '',
+        is_bot_generated UInt8 DEFAULT 0,
+        payload String DEFAULT '',
+        ingested_at DateTime,
+        retention_until DateTime,
+        is_historical UInt8 DEFAULT 0
+      )
+      ENGINE = MergeTree
+      PARTITION BY toStartOfWeek(event_time)
+      ORDER BY (guild_id, event_date, event_type, user_id)
+      TTL retention_until
+      SETTINGS allow_nullable_key = 1
+    `,
+    clickhouse_settings: { wait_end_of_query: 1 },
+  });
+  console.log('ClickHouse raw_events table ready');
+
+  const mvs = [
+    `CREATE MATERIALIZED VIEW IF NOT EXISTS ${db}.mv_daily_activity ENGINE = AggregatingMergeTree PARTITION BY toStartOfWeek(event_date) ORDER BY (guild_id, event_date) AS SELECT guild_id, event_date, countIfState(event_type = 'MESSAGE_CREATE') AS messages_count, countIfState(event_type = 'GUILD_MEMBER_ADD') AS members_joined, sumState(if(event_type = 'VOICE_STATE_UPDATE', toUInt64(JSONExtractInt(payload, 'voiceMinutes')), 0)) AS voice_minutes, uniqCombinedState(user_id) AS unique_users_count FROM ${tableRawEvents} GROUP BY guild_id, event_date`,
+    `CREATE MATERIALIZED VIEW IF NOT EXISTS ${db}.mv_heatmap ENGINE = SummingMergeTree PARTITION BY toStartOfWeek(event_date) ORDER BY (guild_id, day_of_week, hour) AS SELECT guild_id, toDayOfWeek(event_time) AS day_of_week, toHour(event_time) AS hour, event_date, count() AS events_count FROM ${tableRawEvents} WHERE event_type = 'MESSAGE_CREATE' GROUP BY guild_id, day_of_week, hour, event_date`,
+    `CREATE MATERIALIZED VIEW IF NOT EXISTS ${db}.mv_role_stats ENGINE = SummingMergeTree PARTITION BY toStartOfWeek(event_date) ORDER BY (guild_id, role_id, event_date) AS SELECT guild_id, role_id, event_date, count() AS events_count FROM ${tableRawEvents} WHERE role_id != '' GROUP BY guild_id, role_id, event_date`,
+    `CREATE MATERIALIZED VIEW IF NOT EXISTS ${db}.mv_command_stats ENGINE = SummingMergeTree PARTITION BY toStartOfWeek(event_date) ORDER BY (guild_id, command_name, event_date) AS SELECT guild_id, command_name, event_date, count() AS execution_count, sumIf(1, JSONExtractBool(payload, 'isError') = 1) AS error_count FROM ${tableRawEvents} WHERE command_name != '' GROUP BY guild_id, command_name, event_date`,
+    `CREATE MATERIALIZED VIEW IF NOT EXISTS ${db}.mv_voice_stats ENGINE = SummingMergeTree PARTITION BY toStartOfWeek(event_date) ORDER BY (guild_id, user_id, event_date) SETTINGS allow_nullable_key = 1 AS SELECT guild_id, user_id, event_date, sum(toUInt64(JSONExtractInt(payload, 'voiceMinutes'))) AS voice_minutes FROM ${tableRawEvents} WHERE event_type = 'VOICE_STATE_UPDATE' GROUP BY guild_id, user_id, event_date`,
+    `CREATE MATERIALIZED VIEW IF NOT EXISTS ${db}.mv_top_members ENGINE = SummingMergeTree PARTITION BY toStartOfWeek(event_date) ORDER BY (guild_id, user_id) SETTINGS allow_nullable_key = 1 AS SELECT guild_id, user_id, event_date, sumIf(1, event_type = 'MESSAGE_CREATE') AS message_count, sumIf(toUInt64(JSONExtractInt(payload, 'voiceMinutes')), event_type = 'VOICE_STATE_UPDATE') AS voice_minutes FROM ${tableRawEvents} WHERE is_bot_generated = 0 GROUP BY guild_id, user_id, event_date`,
+  ];
+  for (const q of mvs) {
+    await ch.command({ query: q, clickhouse_settings: { wait_end_of_query: 1 } });
+  }
+}
+
 async function runCleanup(ds: typeof AppDataSource, ch: ClickHouseClient, redis: Redis): Promise<void> {
   console.log('Cleaning up...');
   const db = process.env['CLICKHOUSE_DB'] ?? 'default';
@@ -500,6 +550,8 @@ async function main(): Promise<void> {
   await AppDataSource.initialize();
 
   try {
+    await runClickHouseMigrations(ch);
+
     if (clean) {
       await runCleanup(AppDataSource, ch, redis);
     }

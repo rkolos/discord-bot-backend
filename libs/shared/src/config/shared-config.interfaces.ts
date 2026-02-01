@@ -46,3 +46,8 @@ export interface IIngestorConfig {
   batchSize: number;
   batchIntervalMs: number;
 }
+
+export interface IHistorySyncConfig {
+  scanDepth: number;
+  concurrency: number;
+}

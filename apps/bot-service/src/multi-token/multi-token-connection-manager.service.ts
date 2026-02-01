@@ -118,11 +118,15 @@ export class MultiTokenConnectionManagerService
       });
 
       client.on('guildCreate', async (guild) => {
+        this.logger.log(
+          `GUILD_CREATE received (custom token): discordGuildId=${guild.id} name=${guild.name} guildIdUuid=${guildIdUuid}`,
+        );
         try {
           await this.guildSync.onGuildCreate({
             discordGuildId: guild.id,
             guildName: guild.name,
             shardId: 0,
+            discordOwnerId: guild.ownerId,
           });
         } catch (err) {
           this.logger.warn(`guildCreate sync error: ${(err as Error).message}`);

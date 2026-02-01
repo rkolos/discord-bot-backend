@@ -5,7 +5,9 @@
 import 'reflect-metadata';
 import { Client, GatewayIntentBits } from 'discord.js';
 import Redis from 'ioredis';
-import { AppDataSource, Guild } from '@app/shared';
+import { Queue } from 'bullmq';
+import { AppDataSource, Guild, GUILD_SETUP_QUEUE_NAME } from '@app/shared';
+import type { GuildSetupJobPayload } from '@app/shared';
 import {
   syncOnGuildCreate,
   syncOnGuildDelete,
@@ -68,6 +70,15 @@ async function run(): Promise<void> {
 
   const prefix = `sn:${envPrefix()}:`;
   const redisHost = process.env['REDIS_HOST'] ?? 'localhost';
+
+  const guildSetupQueue = new Queue<GuildSetupJobPayload>(GUILD_SETUP_QUEUE_NAME, {
+    connection: {
+      host: redisHost,
+      port: parseInt(process.env['REDIS_PORT'] ?? '6379', 10),
+      password: process.env['REDIS_PASSWORD'] ?? undefined,
+    },
+    prefix,
+  });
   const redisPort = parseInt(process.env['REDIS_PORT'] ?? '6379', 10);
   const redisPassword = process.env['REDIS_PASSWORD'] ?? undefined;
 
@@ -129,12 +140,19 @@ async function run(): Promise<void> {
   });
 
   client.on('guildCreate', async (guild) => {
+    console.log(`[shard-worker] GUILD_CREATE received from Discord: discordGuildId=${guild.id} name=${guild.name}`);
     try {
-      await syncOnGuildCreate(AppDataSource.manager, {
+      const firstContact = await syncOnGuildCreate(AppDataSource.manager, {
         discordGuildId: guild.id,
         guildName: guild.name,
         shardId: SHARD_ID,
+        discordOwnerId: guild.ownerId,
       });
+      if (firstContact) {
+        await guildSetupQueue.add('setup', firstContact, { priority: 5 }).catch((e) => {
+          console.error(`[shard-worker] guildSetupQueue.add error: ${(e as Error).message}`);
+        });
+      }
     } catch (err) {
       console.error(`[shard-worker] guildCreate sync error: ${(err as Error).message}`);
     }
