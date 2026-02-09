@@ -10,6 +10,18 @@ if [ ! -f .env ]; then
   cp .env.example .env
 fi
 
+# Очистка Docker от мусора перед сборкой (освобождает место; именованные тома БД не трогаем)
+echo "Очистка Docker (остановленные контейнеры, кэш сборки, висячие образы, анонимные тома)..."
+docker container prune -f 2>/dev/null || true
+docker image prune -f 2>/dev/null || true
+docker builder prune -f 2>/dev/null || true
+docker network prune -f 2>/dev/null || true
+# Удаляем только анонимные тома (64-символьный hex) — старые node_modules и т.п.; postgres_data, redis_data, clickhouse_data не трогаем
+docker volume ls -q 2>/dev/null | while read -r v; do
+  [ -z "$v" ] && continue
+  echo "$v" | grep -qE '^[0-9a-f]{64}$' && docker volume rm "$v" 2>/dev/null || true
+done
+
 PG_USER="postgres"
 PG_DB="sn"
 if [ -f .env ]; then
@@ -22,8 +34,8 @@ fi
 echo "Сборка образов..."
 docker compose build
 
-echo "Запуск всех контейнеров (без watch — изменения применяются только после перезапуска)..."
-NEST_START_CMD=start docker compose up -d
+echo "Запуск всех контейнеров (start:dev — авто-пересборка при изменениях в коде)..."
+docker compose up -d
 
 echo "Ожидание готовности PostgreSQL..."
 sleep 5

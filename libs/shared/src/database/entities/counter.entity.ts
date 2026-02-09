@@ -20,7 +20,11 @@ export enum CounterMetric {
   MESSAGES = 'messages',
   VOICE = 'voice',
   ONLINE = 'online',
+  IDLE = 'idle',
+  DND = 'dnd',
+  OFFLINE = 'offline',
   BOTS = 'bots',
+  ROLE = 'role',
 }
 
 export enum CounterStatus {
@@ -61,6 +65,9 @@ export class Counter {
     nullable: true,
   })
   metric: CounterMetric | null;
+
+  @Column({ name: 'role_id', type: 'text', nullable: true })
+  roleId: string | null;
 
   @Column({ name: 'template', type: 'text' })
   template: string;

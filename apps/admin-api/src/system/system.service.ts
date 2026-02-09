@@ -2,6 +2,7 @@ import {
   ConflictException,
   HttpException,
   Injectable,
+  Logger,
   NotFoundException,
   OnModuleDestroy,
   OnModuleInit,
@@ -11,23 +12,19 @@ import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Queue } from 'bullmq';
-import { RedisService, SharedConfigService } from '@app/shared';
+import {
+  RedisService,
+  SharedConfigService,
+  ALL_QUEUE_NAMES,
+} from '@app/shared';
 import { Guild, Counter, Widget } from '@app/shared';
-
-const KNOWN_QUEUE_NAMES = [
-  'workers-queue-counters-update',
-  'ingestor-raw-events',
-  'workers-queue-gdpr-user-delete',
-  'workers-queue-logs-config',
-  'workers-queue-history-sync',
-  'workers-queue-guild-setup',
-];
 
 const SHARD_KEY_PREFIX = 'bot-service:shard:';
 const MAINTENANCE_KEY = 'admin-api:maintenance';
 
 @Injectable()
 export class SystemService implements OnModuleInit, OnModuleDestroy {
+  private readonly logger = new Logger(SystemService.name);
   private queues: Map<string, Queue> = new Map();
 
   constructor(
@@ -44,7 +41,10 @@ export class SystemService implements OnModuleInit, OnModuleDestroy {
 
   onModuleInit(): void {
     const { host, port, password, prefix } = this.sharedConfig.redis;
-    for (const name of KNOWN_QUEUE_NAMES) {
+    this.logger.log(
+      `Connecting to queues at ${host}:${port} with prefix "${prefix}" (NODE_ENV should match bot-service/frontend-api)`,
+    );
+    for (const name of ALL_QUEUE_NAMES) {
       const queue = new Queue(name, {
         connection: { host, port, password: password ?? undefined },
         prefix,
@@ -263,8 +263,8 @@ export class SystemService implements OnModuleInit, OnModuleDestroy {
     }>
   > {
     const names = queueName
-      ? KNOWN_QUEUE_NAMES.filter((n) => n === queueName)
-      : KNOWN_QUEUE_NAMES;
+      ? ALL_QUEUE_NAMES.filter((n) => n === queueName)
+      : ALL_QUEUE_NAMES;
     const result: Array<{
       jobId: string;
       queueName: string;

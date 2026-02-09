@@ -12,9 +12,11 @@ import { GuildsModule } from './guilds/guilds.module';
 import { WidgetsModule } from './widgets/widgets.module';
 import { CountersModule } from './counters/counters.module';
 import { LogsModule } from './logs/logs.module';
+import { WelcomeGoodbyeModule } from './welcome-goodbye/welcome-goodbye.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { UserDataModule } from './user-data/user-data.module';
 import { HealthModule } from './health/health.module';
+import { RealtimeModule } from './realtime/realtime.module';
 import { TestValidationController } from './test-validation.controller';
 
 @Module({
@@ -30,9 +32,11 @@ import { TestValidationController } from './test-validation.controller';
     WidgetsModule,
     CountersModule,
     LogsModule,
+    WelcomeGoodbyeModule,
     AnalyticsModule,
     UserDataModule,
     HealthModule,
+    RealtimeModule,
   ],
   controllers: [TestValidationController],
 })

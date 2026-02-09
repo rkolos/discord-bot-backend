@@ -195,8 +195,7 @@ export class GuildsController {
   })
   async getActivitySparkline(
     @Param() params: GuildIdParamDto,
-  ): Promise<{ data: number[] }> {
-    const data = await this.guildsService.getActivitySparkline(params.guildId);
-    return { data };
+  ): Promise<{ data: number[]; level: 'live' | 'active' | 'quiet' }> {
+    return this.guildsService.getActivitySparkline(params.guildId);
   }
 }

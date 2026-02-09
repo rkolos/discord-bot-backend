@@ -46,7 +46,7 @@ export class WidgetsService {
   }
 
   async getWidgetsByGuild(discordGuildId: string): Promise<WidgetResponseDto[]> {
-    const guild = await this.guildsService.findGuildByDiscordId(discordGuildId);
+    const guild = await this.guildsService.findGuildByIdOrDiscordId(discordGuildId);
     if (!guild) {
       throw new NotFoundException({
         code: 'GUILD_NOT_FOUND',
@@ -78,7 +78,7 @@ export class WidgetsService {
     name: string,
     config: WidgetConfigDto | Record<string, unknown>,
   ): Promise<WidgetResponseDto> {
-    const guild = await this.guildsService.findGuildByDiscordId(discordGuildId);
+    const guild = await this.guildsService.findGuildByIdOrDiscordId(discordGuildId);
     if (!guild) {
       throw new NotFoundException({
         code: 'GUILD_NOT_FOUND',
@@ -108,7 +108,7 @@ export class WidgetsService {
     name?: string,
     config?: WidgetConfigDto | Record<string, unknown>,
   ): Promise<WidgetResponseDto> {
-    const guild = await this.guildsService.findGuildByDiscordId(discordGuildId);
+    const guild = await this.guildsService.findGuildByIdOrDiscordId(discordGuildId);
     if (!guild) {
       throw new NotFoundException({
         code: 'GUILD_NOT_FOUND',
@@ -135,7 +135,7 @@ export class WidgetsService {
     discordGuildId: string,
     widgetId: string,
   ): Promise<{ success: true }> {
-    const guild = await this.guildsService.findGuildByDiscordId(discordGuildId);
+    const guild = await this.guildsService.findGuildByIdOrDiscordId(discordGuildId);
     if (!guild) {
       throw new NotFoundException({
         code: 'GUILD_NOT_FOUND',

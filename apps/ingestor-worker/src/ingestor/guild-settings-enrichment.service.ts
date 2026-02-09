@@ -19,7 +19,7 @@ export class GuildSettingsEnrichmentService {
 
   /**
    * Возвращает настройки гильдии по внутреннему UUID для обогащения события
-   * (anonymize_user_data, plan_tier). При отсутствии записи — дефолт: анонимизация включена.
+   * (anonymize_user_data, plan_tier). При отсутствии записи — дефолт: анонимизация выключена.
    */
   async getSettings(guildId: string): Promise<GuildSettingsEnrichment> {
     const [settings, guild] = await Promise.all([
@@ -33,7 +33,7 @@ export class GuildSettingsEnrichmentService {
       }),
     ]);
     return {
-      anonymizeUserData: settings?.anonymizeUserData ?? true,
+      anonymizeUserData: settings?.anonymizeUserData ?? false,
       planTier: guild?.subscriptionTier ?? 'free',
     };
   }

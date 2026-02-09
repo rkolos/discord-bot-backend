@@ -63,6 +63,7 @@ Complete list of error codes used throughout the API.
 
 - `INTERNAL_SERVER_ERROR` - Internal server error
 - `SERVICE_UNAVAILABLE` - Service temporarily unavailable
+- `ANALYTICS_UNAVAILABLE` - Analytics storage (ClickHouse) is temporarily unavailable; message counts and related stats cannot be returned
 
 ---
 

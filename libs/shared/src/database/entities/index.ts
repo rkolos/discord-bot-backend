@@ -9,6 +9,7 @@ export * from './guild.entity';
 export * from './guild-module.entity';
 export * from './server-settings.entity';
 export * from './guild-log-setting.entity';
+export * from './guild-welcome-goodbye-setting.entity';
 export * from './counter.entity';
 export * from './widget.entity';
 export * from './subscription-plan.entity';

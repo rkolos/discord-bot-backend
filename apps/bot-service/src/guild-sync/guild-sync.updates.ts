@@ -97,7 +97,7 @@ export async function syncOnGuildCreate(
 }
 
 /**
- * Обновление БД при GUILD_DELETE: status = inactive, is_bot_in_guild = false.
+ * Обновление БД при GUILD_DELETE: status = inactive, is_bot_in_guild = false, server_settings.bot_connected = false.
  */
 export async function syncOnGuildDelete(
   manager: EntityManager,
@@ -113,4 +113,12 @@ export async function syncOnGuildDelete(
   guild.status = GuildStatus.INACTIVE;
   guild.isBotInGuild = false;
   await manager.save(Guild, guild);
+
+  const settings = await manager.findOne(ServerSettings, {
+    where: { guildId: guild.id },
+  });
+  if (settings) {
+    settings.botConnected = false;
+    await manager.save(ServerSettings, settings);
+  }
 }

@@ -38,6 +38,7 @@ export class CountersQueueService implements OnModuleDestroy {
         channel_id: counter.channelId,
         type: counter.type,
         metric: counter.metric,
+        role_id: counter.roleId ?? undefined,
       },
       { priority: priority ?? 0 },
     );

@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { CryptoModule, Guild, GuildLogSetting } from '@app/shared';
+import { CryptoModule, Guild, GuildLogSetting, GuildWelcomeGoodbyeSetting } from '@app/shared';
 import { ServerSettings } from '@app/shared';
 import { GuildSyncModule } from '../guild-sync/guild-sync.module';
 import { CommandsModule } from '../commands/commands.module';
@@ -11,7 +11,7 @@ import { MultiTokenEventsService } from './multi-token-events.service';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([ServerSettings, Guild, GuildLogSetting]),
+    TypeOrmModule.forFeature([ServerSettings, Guild, GuildLogSetting, GuildWelcomeGoodbyeSetting]),
     CryptoModule,
     GuildSyncModule,
     CommandsModule,

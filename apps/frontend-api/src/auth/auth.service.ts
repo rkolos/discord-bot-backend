@@ -26,7 +26,7 @@ const REFRESH_TOKEN_TTL_DAYS = 7;
 
 function buildAvatarUrl(discordId: string, avatarHash: string | null): string | null {
   if (!avatarHash) return null;
-  return `https://cdn.discordapp.com/avatars/${discordId}/${avatarHash}.png`;
+  return `https://cdn.discordapp.com/avatars/${discordId}/${avatarHash}.png?size=80`;
 }
 
 @Injectable()

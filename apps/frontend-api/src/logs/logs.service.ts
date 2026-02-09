@@ -35,7 +35,7 @@ export class LogsService {
   ) {}
 
   async getSettings(discordGuildId: string): Promise<LogSettingResponseDto[]> {
-    const guild = await this.guildsService.findGuildByDiscordId(discordGuildId);
+    const guild = await this.guildsService.findGuildByIdOrDiscordId(discordGuildId);
     if (!guild) {
       throw new NotFoundException({
         code: 'GUILD_NOT_FOUND',
@@ -62,7 +62,7 @@ export class LogsService {
     discordGuildId: string,
     dto: PatchLogSettingsDto,
   ): Promise<LogSettingResponseDto[]> {
-    const guild = await this.guildsService.findGuildByDiscordId(discordGuildId);
+    const guild = await this.guildsService.findGuildByIdOrDiscordId(discordGuildId);
     if (!guild) {
       throw new NotFoundException({
         code: 'GUILD_NOT_FOUND',

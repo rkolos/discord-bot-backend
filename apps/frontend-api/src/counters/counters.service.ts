@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Counter, CounterStatus, CounterType, previewCounterTemplate } from '@app/shared';
+import { Counter, CounterMetric, CounterStatus, CounterType, previewCounterTemplate } from '@app/shared';
 import { GuildsService } from '../guilds/guilds.service';
 import { CountersQueueService } from './counters-queue.service';
 import type { CreateCounterDto } from './dto/create-counter.dto';
@@ -13,6 +13,7 @@ export interface CounterResponseDto {
   channelName: string;
   type: CounterType;
   metric: string | null;
+  roleId: string | null;
   template: string;
   status: CounterStatus;
   currentValue: number | null;
@@ -30,6 +31,7 @@ function toCounterResponseDto(c: Counter): CounterResponseDto {
     channelName: c.channelName,
     type: c.type,
     metric: c.metric,
+    roleId: c.roleId ?? null,
     template: c.template,
     status: c.status,
     currentValue: c.currentValue != null ? Number(c.currentValue) : null,
@@ -54,7 +56,7 @@ export class CountersService {
     discordGuildId: string,
     dto: CreateCounterDto,
   ): Promise<CounterResponseDto> {
-    const guild = await this.guildsService.findGuildByDiscordId(discordGuildId);
+    const guild = await this.guildsService.findGuildByIdOrDiscordId(discordGuildId);
     if (!guild) {
       throw new NotFoundException({
         code: 'GUILD_NOT_FOUND',
@@ -68,6 +70,7 @@ export class CountersService {
       channelName,
       type: dto.type,
       metric: dto.metric ?? null,
+      roleId: dto.metric === CounterMetric.ROLE ? (dto.roleId ?? null) : null,
       template: dto.template,
       status: CounterStatus.ACTIVE,
       currentValue: null,
@@ -82,7 +85,7 @@ export class CountersService {
   }
 
   async findAllByGuild(discordGuildId: string): Promise<CounterResponseDto[]> {
-    const guild = await this.guildsService.findGuildByDiscordId(discordGuildId);
+    const guild = await this.guildsService.findGuildByIdOrDiscordId(discordGuildId);
     if (!guild) {
       throw new NotFoundException({
         code: 'GUILD_NOT_FOUND',
@@ -101,7 +104,7 @@ export class CountersService {
     counterId: string,
     dto: PatchCounterDto,
   ): Promise<CounterResponseDto> {
-    const guild = await this.guildsService.findGuildByDiscordId(discordGuildId);
+    const guild = await this.guildsService.findGuildByIdOrDiscordId(discordGuildId);
     if (!guild) {
       throw new NotFoundException({
         code: 'GUILD_NOT_FOUND',
@@ -119,7 +122,13 @@ export class CountersService {
     }
     if (dto.channelId != null) counter.channelId = dto.channelId;
     if (dto.type != null) counter.type = dto.type;
-    if (dto.metric !== undefined) counter.metric = dto.metric ?? null;
+    if (dto.metric !== undefined) {
+      counter.metric = dto.metric ?? null;
+      counter.roleId = dto.metric === CounterMetric.ROLE ? (dto.roleId ?? null) : null;
+    }
+    if (dto.roleId !== undefined && counter.metric === CounterMetric.ROLE) {
+      counter.roleId = dto.roleId ?? null;
+    }
     if (dto.template != null) {
       counter.template = dto.template;
       counter.channelName = previewCounterTemplate(dto.template);
@@ -140,7 +149,7 @@ export class CountersService {
     discordGuildId: string,
     counterId: string,
   ): Promise<{ success: true }> {
-    const guild = await this.guildsService.findGuildByDiscordId(discordGuildId);
+    const guild = await this.guildsService.findGuildByIdOrDiscordId(discordGuildId);
     if (!guild) {
       throw new NotFoundException({
         code: 'GUILD_NOT_FOUND',

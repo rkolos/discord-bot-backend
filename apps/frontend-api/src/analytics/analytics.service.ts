@@ -42,7 +42,7 @@ export class AnalyticsService {
     discordGuildId: string,
     timezoneOptions?: AnalyticsTimezoneOptions,
   ): Promise<AnalyticsOverviewDto> {
-    const guild = await this.guildsService.findGuildByDiscordId(discordGuildId);
+    const guild = await this.guildsService.findGuildByIdOrDiscordId(discordGuildId);
     if (!guild) {
       throw new NotFoundException({
         code: 'GUILD_NOT_FOUND',
@@ -60,7 +60,7 @@ export class AnalyticsService {
     _period?: 'day' | 'week' | 'month',
     timezoneOptions?: AnalyticsTimezoneOptions,
   ): Promise<ActivityChartPointDto[]> {
-    const guild = await this.guildsService.findGuildByDiscordId(discordGuildId);
+    const guild = await this.guildsService.findGuildByIdOrDiscordId(discordGuildId);
     if (!guild) {
       throw new NotFoundException({
         code: 'GUILD_NOT_FOUND',
@@ -83,14 +83,17 @@ export class AnalyticsService {
     sortBy: 'messages' | 'voice',
     limit: number,
   ): Promise<TopMemberDto[]> {
-    const guild = await this.guildsService.findGuildByDiscordId(discordGuildId);
+    const guild = await this.guildsService.findGuildByIdOrDiscordId(discordGuildId);
     if (!guild) {
       throw new NotFoundException({
         code: 'GUILD_NOT_FOUND',
         message: 'Guild not found or access denied',
       });
     }
-    return this.sharedAnalytics.getTopMembersByGuildId(guild.id, sortBy, limit);
+    const settings = await this.guildsService.getSettings(discordGuildId);
+    return this.sharedAnalytics.getTopMembersByGuildId(guild.id, sortBy, limit, {
+      anonymizeUserData: settings.anonymizeUserData,
+    });
   }
 
   validateDateRange(from: string, to: string): void {
@@ -157,7 +160,7 @@ export class AnalyticsService {
       category: string;
     }>;
   }> {
-    const guild = await this.guildsService.findGuildByDiscordId(discordGuildId);
+    const guild = await this.guildsService.findGuildByIdOrDiscordId(discordGuildId);
     if (!guild) {
       throw new NotFoundException({
         code: 'GUILD_NOT_FOUND',
@@ -167,6 +170,7 @@ export class AnalyticsService {
     this.validateDateRange(from, to);
     this.validatePlanPeriod(guild.subscriptionTier, from, to);
     const timezone = await this.resolveTimezone(discordGuildId, timezoneOptions);
+    const settings = await this.guildsService.getSettings(discordGuildId);
     const [
       timeSeries,
       topMembers,
@@ -184,7 +188,9 @@ export class AnalyticsService {
         to,
         timezone,
       ),
-      this.sharedAnalytics.getTopMembersByGuildId(guild.id, 'messages', 20),
+      this.sharedAnalytics.getTopMembersByGuildId(guild.id, 'messages', 20, {
+        anonymizeUserData: settings.anonymizeUserData,
+      }),
       this.sharedAnalytics.getTopCommandsByGuildId(guild.id, from, to, 10),
       this.sharedAnalytics.getTopChannelsByMessages(guild.id, from, to, 10),
       this.sharedAnalytics.getTopChannelsByVoice(guild.id, from, to, 10),
@@ -245,20 +251,14 @@ export class AnalyticsService {
   async getHeatmap(
     discordGuildId: string,
   ): Promise<Array<{ dayOfWeek: number; hour: number; value: number }>> {
-    const guild = await this.guildsService.findGuildByDiscordId(discordGuildId);
+    const guild = await this.guildsService.findGuildByIdOrDiscordId(discordGuildId);
     if (!guild) {
       throw new NotFoundException({
         code: 'GUILD_NOT_FOUND',
         message: 'Guild not found or access denied',
       });
     }
-    const result: Array<{ dayOfWeek: number; hour: number; value: number }> = [];
-    for (let d = 0; d < 7; d++) {
-      for (let h = 0; h < 24; h++) {
-        result.push({ dayOfWeek: d, hour: h, value: 0 });
-      }
-    }
-    return result;
+    return this.sharedAnalytics.getHeatmapByGuildId(guild.id);
   }
 
   async getLeaderboard(
@@ -278,7 +278,7 @@ export class AnalyticsService {
     }>;
     pagination: { page: number; pageSize: number; total: number };
   }> {
-    const guild = await this.guildsService.findGuildByDiscordId(discordGuildId);
+    const guild = await this.guildsService.findGuildByIdOrDiscordId(discordGuildId);
     if (!guild) {
       throw new NotFoundException({
         code: 'GUILD_NOT_FOUND',
@@ -287,10 +287,12 @@ export class AnalyticsService {
     }
     const limit = Math.min(100, Math.max(1, pageSize));
     const sortByMetric = sortBy === 'rank' ? 'messages' : sortBy;
+    const settings = await this.guildsService.getSettings(discordGuildId);
     const topMembers = await this.sharedAnalytics.getTopMembersByGuildId(
       guild.id,
       sortByMetric,
       500,
+      { anonymizeUserData: settings.anonymizeUserData },
     );
     const ordered =
       sortOrder === 'asc'

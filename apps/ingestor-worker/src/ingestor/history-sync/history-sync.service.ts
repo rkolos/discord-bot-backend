@@ -9,6 +9,8 @@ import {
   ServerSettings,
   SharedConfigService,
   CryptoService,
+  RedisService,
+  publishGuildStateEvent,
   computeAnonymizedHash,
 } from '@app/shared';
 import type { RawEvent } from '../ingestor.types';
@@ -19,6 +21,8 @@ import { ClickHouseService } from '@app/shared';
 const DISCORD_API_BASE = 'https://discord.com/api/v10';
 const GUILD_TEXT_TYPE = 0;
 const MESSAGES_LIMIT_PER_REQUEST = 100;
+/** Максимум строк в одном INSERT в ClickHouse, чтобы не перегружать память и не упираться в лимиты. */
+const CLICKHOUSE_INSERT_CHUNK_SIZE = 10_000;
 
 interface DiscordChannel {
   id: string;
@@ -28,7 +32,14 @@ interface DiscordChannel {
 interface DiscordMessage {
   id: string;
   channel_id: string;
-  author?: { id: string; bot?: boolean };
+  author?: {
+    id: string;
+    bot?: boolean;
+    username?: string;
+    discriminator?: string;
+    global_name?: string | null;
+    avatar?: string | null;
+  };
   content?: string;
   timestamp: string;
 }
@@ -42,6 +53,7 @@ export class HistorySyncService {
     private readonly configService: ConfigService,
     private readonly crypto: CryptoService,
     private readonly clickhouse: ClickHouseService,
+    private readonly redis: RedisService,
     @InjectRepository(Guild)
     private readonly guildRepository: Repository<Guild>,
     @InjectRepository(ServerSettings)
@@ -68,15 +80,28 @@ export class HistorySyncService {
   }
 
   async run(guildId: string, discordGuildId: string, enrichment: GuildSettingsEnrichment): Promise<void> {
+    this.logger.log(`[analytics] history sync start guildId=${guildId} discordGuildId=${discordGuildId}`);
     await this.guildRepository.update(
       { id: guildId },
       { historySyncStatus: HistorySyncStatus.PROCESSING },
     );
+    publishGuildStateEvent(this.redis.getClient(), this.sharedConfig.redis.prefix, {
+      guildId,
+      discordGuildId,
+      parameter: 'historySyncStatus',
+      direction: 'set',
+      value: HistorySyncStatus.PROCESSING,
+    });
 
     try {
       const token = await this.resolveToken(guildId);
       const channels = await this.fetchChannels(discordGuildId, token);
       const textChannels = channels.filter((c) => c.type === GUILD_TEXT_TYPE);
+      if (textChannels.length === 0) {
+        this.logger.log(
+          `[analytics] history sync no text channels guildId=${guildId} discordGuildId=${discordGuildId}`,
+        );
+      }
 
       const { scanDepth, concurrency } = this.sharedConfig.historySync;
       const existingMessageIds = await this.fetchExistingMessageIds(guildId);
@@ -104,21 +129,45 @@ export class HistorySyncService {
         (e as RawEvent & { anonymizeUserData?: boolean }).anonymizeUserData = enrichment.anonymizeUserData;
       }
 
+      const messageCountKeySuffix = 'bot-service:guild-state:message-count:';
       if (events.length > 0) {
         await this.insertEvents(events);
+        const newTotal = await this.getTotalMessagesCount(guildId);
+        await this.redis.getClient().set(messageCountKeySuffix + guildId, String(newTotal)).catch(() => {});
+        publishGuildStateEvent(this.redis.getClient(), this.sharedConfig.redis.prefix, {
+          guildId,
+          discordGuildId,
+          parameter: 'totalMessages',
+          direction: 'set',
+          value: newTotal,
+        });
       }
 
       await this.guildRepository.update(
         { id: guildId },
         { historySyncStatus: HistorySyncStatus.COMPLETED },
       );
-      this.logger.log(`History sync completed for guild ${guildId}: ${events.length} events`);
+      publishGuildStateEvent(this.redis.getClient(), this.sharedConfig.redis.prefix, {
+        guildId,
+        discordGuildId,
+        parameter: 'historySyncStatus',
+        direction: 'set',
+        value: HistorySyncStatus.COMPLETED,
+      });
+      this.logger.log(`[analytics] history sync completed guildId=${guildId} events=${events.length}`);
     } catch (err) {
-      this.logger.error(`History sync failed for guild ${guildId}: ${(err as Error).message}`);
+      this.logger.error(`[analytics] history sync failed guildId=${guildId}: ${(err as Error).message}`);
       await this.guildRepository.update(
         { id: guildId },
         { historySyncStatus: HistorySyncStatus.FAILED },
       );
+      publishGuildStateEvent(this.redis.getClient(), this.sharedConfig.redis.prefix, {
+        guildId,
+        discordGuildId,
+        parameter: 'historySyncStatus',
+        direction: 'set',
+        value: HistorySyncStatus.FAILED,
+      });
       throw err;
     }
   }
@@ -168,10 +217,19 @@ export class HistorySyncService {
       if (messages.length === 0) break;
 
       for (const msg of messages) {
+        const author = msg.author;
+        const userTag =
+          author?.username != null
+            ? author.discriminator && author.discriminator !== '0'
+              ? `${author.username}#${author.discriminator}`
+              : (author.global_name ?? author.username)
+            : '';
         const payload = {
           messageId: msg.id,
           channelId: msg.channel_id,
-          userId: msg.author?.id,
+          userId: author?.id,
+          userTag: userTag || undefined,
+          avatar: author?.avatar ?? undefined,
           content: msg.content ?? '',
           timestamp: msg.timestamp,
         };
@@ -204,7 +262,7 @@ export class HistorySyncService {
       const result = await this.clickhouse.query({
         query: `SELECT JSONExtractString(payload, 'messageId') AS msg_id
                 FROM ${db}.raw_events
-                WHERE guild_id = {guildId:String} AND event_type = 'MESSAGE_CREATE'`,
+                WHERE guild_id = toUUID({guildId:String}) AND event_type = 'MESSAGE_CREATE'`,
         query_params: { guildId },
       });
       const json = (await result.json()) as Array<{ msg_id: string }> | { data?: Array<{ msg_id: string }> };
@@ -215,6 +273,25 @@ export class HistorySyncService {
     }
   }
 
+  /** Количество записей MESSAGE_CREATE по гильдии в raw_events (для guild-state totalMessages). */
+  private async getTotalMessagesCount(guildId: string): Promise<number> {
+    const db = this.sharedConfig.clickhouse.database || 'default';
+    try {
+      const result = await this.clickhouse.query({
+        query: `SELECT count() AS total
+                FROM ${db}.raw_events
+                WHERE guild_id = toUUID({guildId:String}) AND event_type = 'MESSAGE_CREATE'`,
+        query_params: { guildId },
+      });
+      const json = (await result.json()) as Array<{ total: string | number }> | { data?: Array<{ total: string | number }> };
+      const rows = Array.isArray(json) ? json : (json.data ?? []);
+      const total = rows[0]?.total;
+      return typeof total === 'number' ? total : Number(total ?? 0);
+    } catch {
+      return 0;
+    }
+  }
+
   private async insertEvents(events: RawEvent[]): Promise<void> {
     const salt = this.sharedConfig.auth.anonymizationSalt;
     const values = events.map((e) => {
@@ -222,7 +299,7 @@ export class HistorySyncService {
       const eventTimeStr = eventTime.replace('T', ' ').replace('Z', '').slice(0, 19);
       const eventDate = eventTimeStr.slice(0, 10);
       const planTier = (e as { planTier?: string }).planTier ?? 'free';
-      const anonymizeUserData = (e as { anonymizeUserData?: boolean }).anonymizeUserData ?? true;
+      const anonymizeUserData = (e as { anonymizeUserData?: boolean }).anonymizeUserData ?? false;
       const retentionUntil = computeRetentionUntil(e.eventTime, planTier);
       const shouldAnonymize =
         anonymizeUserData && e.discordUserId != null && String(e.discordUserId).trim() !== '';
@@ -250,9 +327,31 @@ export class HistorySyncService {
       };
     });
 
+    // raw_events партиционирована по toStartOfWeek(event_time); один INSERT не должен затрагивать >100 партиций.
+    const byWeek = new Map<string, typeof values>();
+    for (const row of values) {
+      const weekKey = getWeekStartKey(row.event_time as string);
+      const list = byWeek.get(weekKey) ?? [];
+      list.push(row);
+      byWeek.set(weekKey, list);
+    }
     const table = `${this.sharedConfig.clickhouse.database || 'default'}.raw_events`;
-    await this.clickhouse.insert({ table, values, format: 'JSONEachRow' });
+    for (const weekRows of byWeek.values()) {
+      for (let i = 0; i < weekRows.length; i += CLICKHOUSE_INSERT_CHUNK_SIZE) {
+        const chunk = weekRows.slice(i, i + CLICKHOUSE_INSERT_CHUNK_SIZE);
+        await this.clickhouse.insert({ table, values: chunk, format: 'JSONEachRow' });
+      }
+    }
   }
+}
+
+/** Понедельник недели в формате YYYY-MM-DD (совпадает с ClickHouse toStartOfWeek). */
+function getWeekStartKey(eventTimeStr: string): string {
+  const date = new Date(eventTimeStr.replace(' ', 'T') + 'Z');
+  const day = date.getUTCDay(); // 0=Sun, 1=Mon, ..., 6=Sat
+  const diff = day === 0 ? 6 : day - 1;
+  date.setUTCDate(date.getUTCDate() - diff);
+  return date.toISOString().slice(0, 10);
 }
 
 function toHistUuid(messageId: string): string {

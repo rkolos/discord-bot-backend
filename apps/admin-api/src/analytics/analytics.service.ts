@@ -13,6 +13,9 @@ import {
 const METRIC_TO_SPEC_TYPE: Record<string, string> = {
   [CounterMetric.MEMBERS]: 'members_total',
   [CounterMetric.ONLINE]: 'members_online',
+  [CounterMetric.IDLE]: 'members_idle',
+  [CounterMetric.DND]: 'members_dnd',
+  [CounterMetric.OFFLINE]: 'members_offline',
   [CounterMetric.VOICE]: 'voice_connected',
   [CounterMetric.BOTS]: 'game_activity',
   [CounterMetric.MESSAGES]: 'messages',

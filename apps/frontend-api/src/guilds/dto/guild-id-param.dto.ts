@@ -1,6 +1,6 @@
-import { IsSnowflake } from '@app/shared';
+import { IsGuildId } from '@app/shared';
 
 export class GuildIdParamDto {
-  @IsSnowflake()
+  @IsGuildId()
   guildId: string;
 }

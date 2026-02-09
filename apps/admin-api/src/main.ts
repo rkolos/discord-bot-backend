@@ -1,16 +1,18 @@
 import { BadRequestException, ValidationPipe } from '@nestjs/common';
 import { HttpAdapterHost, NestFactory } from '@nestjs/core';
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import * as cookieParser from 'cookie-parser';
+import { AllExceptionsFilter, FilteredBootstrapLogger } from '@app/shared';
+import { AppModule } from './app.module';
 
 function parseCorsOrigins(value: string): string[] {
   return value.split(',').map((s) => s.trim()).filter(Boolean);
 }
-import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
-import * as cookieParser from 'cookie-parser';
-import { AllExceptionsFilter } from '@app/shared';
-import { AppModule } from './app.module';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, {
+    logger: new FilteredBootstrapLogger(),
+  });
   app.enableShutdownHooks();
   const corsOrigins = parseCorsOrigins(
     process.env.CORS_ORIGIN ?? process.env.ADMIN_PANEL_URL ?? 'http://localhost:3020',

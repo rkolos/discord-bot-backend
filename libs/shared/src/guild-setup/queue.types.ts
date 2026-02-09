@@ -1,5 +1,7 @@
-/** Имя очереди (BullMQ). Полный ключ Redis: sn:{env}:workers-queue-guild-setup */
-export const GUILD_SETUP_QUEUE_NAME = 'workers-queue-guild-setup';
+import { GUILD_SETUP_QUEUE_NAME } from '../queues/queue-names.constants';
+
+// Реэкспорт константы для обратной совместимости
+export { GUILD_SETUP_QUEUE_NAME };
 
 export interface GuildSetupJobPayload {
   discordGuildId: string;

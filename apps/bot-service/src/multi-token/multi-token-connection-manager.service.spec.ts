@@ -55,7 +55,13 @@ describe('MultiTokenConnectionManagerService', () => {
         { provide: getRepositoryToken(Guild), useValue: mockGuildRepo },
         {
           provide: GuildSyncService,
-          useValue: { onReady: jest.fn(), onGuildCreate: jest.fn(), onGuildDelete: jest.fn() },
+          useValue: {
+            onReady: jest.fn(),
+            onGuildCreate: jest.fn(),
+            onGuildDelete: jest.fn(),
+            onGuildUpdate: jest.fn().mockResolvedValue(undefined),
+            publishBotDisconnected: jest.fn(),
+          },
         },
         { provide: SharedConfigService, useValue: mockSharedConfig },
         { provide: ConfigService, useValue: mockConfigService },

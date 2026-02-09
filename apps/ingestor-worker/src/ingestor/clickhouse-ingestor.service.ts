@@ -7,7 +7,9 @@ import {
 import {
   ClickHouseService,
   SharedConfigService,
+  RedisService,
   computeAnonymizedHash,
+  publishGuildStateEvent,
 } from '@app/shared';
 import type { RawEvent } from './ingestor.types';
 import { computeRetentionUntil } from './retention.helper';
@@ -28,6 +30,7 @@ export class ClickHouseIngestorService
   constructor(
     private readonly clickhouse: ClickHouseService,
     private readonly config: SharedConfigService,
+    private readonly redis: RedisService,
   ) {}
 
   onModuleInit(): void {
@@ -80,7 +83,31 @@ export class ClickHouseIngestorService
           values,
           format: 'JSONEachRow',
         });
-        this.logger.debug(`Inserted ${batch.length} events into ${table}`);
+        const guildIds = [...new Set(batch.map((e) => e.guildId))];
+        this.logger.log(
+          `[analytics] ClickHouse insert count=${batch.length} guildIds=[${guildIds.slice(0, 3).join(', ')}${guildIds.length > 3 ? '...' : ''}]`,
+        );
+        const messageGuilds = batch
+          .filter((e) => e.eventType === 'MESSAGE_CREATE')
+          .reduce(
+            (acc, e) => {
+              if (!acc.has(e.guildId)) acc.set(e.guildId, e.discordGuildId);
+              return acc;
+            },
+            new Map<string, string>(),
+          );
+        const messageCountKeySuffix = 'bot-service:guild-state:message-count:';
+        for (const [guildId, discordGuildId] of messageGuilds) {
+          const newTotal = await this.getTotalMessagesCount(guildId);
+          await this.redis.getClient().set(messageCountKeySuffix + guildId, String(newTotal)).catch(() => {});
+          publishGuildStateEvent(this.redis.getClient(), this.config.redis.prefix, {
+            guildId,
+            discordGuildId,
+            parameter: 'totalMessages',
+            direction: 'set',
+            value: newTotal,
+          });
+        }
         return;
       } catch (err) {
         this.logger.warn(
@@ -102,6 +129,27 @@ export class ClickHouseIngestorService
   /** Для тестов: текущий размер буфера. */
   getBufferLength(): number {
     return this.buffer.length;
+  }
+
+  /** Количество MESSAGE_CREATE по гильдии в raw_events (для guild-state totalMessages). */
+  private async getTotalMessagesCount(guildId: string): Promise<number> {
+    const db = this.config.clickhouse.database || 'default';
+    try {
+      const result = await this.clickhouse.query({
+        query: `SELECT count() AS total
+                FROM ${db}.raw_events
+                WHERE guild_id = toUUID({guildId:String}) AND event_type = 'MESSAGE_CREATE'`,
+        query_params: { guildId },
+      });
+      const json = (await result.json()) as
+        | Array<{ total: string | number }>
+        | { data?: Array<{ total: string | number }> };
+      const rows = Array.isArray(json) ? json : (json.data ?? []);
+      const total = rows[0]?.total;
+      return typeof total === 'number' ? total : Number(total ?? 0);
+    } catch {
+      return 0;
+    }
   }
 }
 

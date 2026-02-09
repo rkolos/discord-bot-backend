@@ -156,7 +156,7 @@ All public endpoints do not require authentication.
 
 **Endpoint:** `GET /api/stats`
 
-**Description:** Get public platform statistics.
+**Description:** Get public platform statistics. `totalMessages` is computed from analytics storage (ClickHouse).
 
 **Response:** `200 OK`
 ```json
@@ -168,6 +168,17 @@ All public endpoints do not require authentication.
   }
 }
 ```
+
+**Error Response:**
+- `503 Service Unavailable` - Analytics storage (ClickHouse) is temporarily unavailable
+  ```json
+  {
+    "error": {
+      "code": "ANALYTICS_UNAVAILABLE",
+      "message": "Analytics storage (ClickHouse) is temporarily unavailable. ..."
+    }
+  }
+  ```
 
 ---
 

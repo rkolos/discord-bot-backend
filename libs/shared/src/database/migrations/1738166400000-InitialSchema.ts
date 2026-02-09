@@ -142,7 +142,7 @@ export class InitialSchema1738166400000 implements MigrationInterface {
         "last_connected" TIMESTAMP WITH TIME ZONE,
         "last_sync_at" TIMESTAMP WITH TIME ZONE,
         "data_retention_days" integer NOT NULL DEFAULT 0,
-        "anonymize_user_data" boolean NOT NULL DEFAULT true,
+        "anonymize_user_data" boolean NOT NULL DEFAULT false,
         "share_analytics" boolean NOT NULL DEFAULT true,
         "allow_public_widgets" boolean NOT NULL DEFAULT true,
         "updated_at" TIMESTAMP WITH TIME ZONE NOT NULL,

@@ -25,6 +25,8 @@ const RATE_LIMIT_MAX_UPDATES = 2;
 const RATE_LIMIT_KEY_PREFIX = 'bot-service:ratelimit:channel:';
 const MEMBER_COUNT_CACHE_KEY_PREFIX = 'bot-service:cache:guild:';
 const MEMBER_COUNT_SUFFIX = ':member_count';
+const ROLE_COUNTS_CACHE_SUFFIX = ':role_counts';
+const PRESENCE_CACHE_KEY_PREFIX = 'bot-service:presence:';
 
 @Injectable()
 export class CountersConsumerService implements OnModuleInit, OnModuleDestroy {
@@ -92,7 +94,7 @@ export class CountersConsumerService implements OnModuleInit, OnModuleDestroy {
       return;
     }
 
-    const value = await this.getMetricValue(guild_id, counter.metric);
+    const value = await this.getMetricValue(guild_id, counter.metric, counter.roleId, guild.discordGuildId);
     const channelName = formatCounterChannelName(counter.template, {
       count: value,
       date: new Date(),
@@ -127,7 +129,26 @@ export class CountersConsumerService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  private async getMetricValue(guildId: string, metric: string | null): Promise<number> {
+  private async getMetricValue(
+    guildId: string,
+    metric: string | null,
+    roleId: string | null | undefined,
+    discordGuildId?: string,
+  ): Promise<number> {
+    if (metric === CounterMetric.ROLE && roleId) {
+      const redis = this.redisService.getClient();
+      const key = `${this.sharedConfig.redis.prefix}${MEMBER_COUNT_CACHE_KEY_PREFIX}${guildId}${ROLE_COUNTS_CACHE_SUFFIX}`;
+      const raw = await redis.hget(key, roleId);
+      if (raw != null) {
+        const n = parseInt(raw, 10);
+        if (!Number.isNaN(n) && n >= 0) return n;
+      }
+      if (discordGuildId) {
+        const count = await this.fetchRoleMemberCountFromDiscord(discordGuildId, roleId, key, redis);
+        if (count >= 0) return count;
+      }
+      return 0;
+    }
     if (metric === CounterMetric.MEMBERS) {
       const redis = this.redisService.getClient();
       const key = `${this.sharedConfig.redis.prefix}${MEMBER_COUNT_CACHE_KEY_PREFIX}${guildId}${MEMBER_COUNT_SUFFIX}`;
@@ -151,10 +172,76 @@ export class CountersConsumerService implements OnModuleInit, OnModuleDestroy {
         return 0;
       }
     }
-    if (metric === CounterMetric.VOICE || metric === CounterMetric.ONLINE || metric === CounterMetric.BOTS) {
+    if (metric === CounterMetric.ONLINE || metric === CounterMetric.IDLE || metric === CounterMetric.DND || metric === CounterMetric.OFFLINE) {
+      const redis = this.redisService.getClient();
+      const key = `${this.sharedConfig.redis.prefix}${PRESENCE_CACHE_KEY_PREFIX}${guildId}`;
+      const hash = (await redis.hgetall(key).catch(() => ({}))) as Record<string, string>;
+      const online = parseInt(String(hash['online'] ?? 0), 10) || 0;
+      const idle = parseInt(String(hash['idle'] ?? 0), 10) || 0;
+      const dnd = parseInt(String(hash['dnd'] ?? 0), 10) || 0;
+      const offline = parseInt(String(hash['offline'] ?? 0), 10) || 0;
+      if (metric === CounterMetric.ONLINE) {
+        const totalVisible = online + idle + dnd;
+        if (totalVisible > 0) return totalVisible;
+        const guild = await this.guildRepository.findOne({
+          where: { id: guildId },
+          select: ['onlineMembers'],
+        });
+        return guild?.onlineMembers ?? 0;
+      }
+      if (metric === CounterMetric.IDLE) return idle;
+      if (metric === CounterMetric.DND) return dnd;
+      if (metric === CounterMetric.OFFLINE) return offline;
+    }
+    if (metric === CounterMetric.VOICE || metric === CounterMetric.BOTS) {
       return 0;
     }
     return 0;
+  }
+
+  /**
+   * Fallback: fetch members from Discord API, count by role, populate Redis and return count for roleId.
+   */
+  private async fetchRoleMemberCountFromDiscord(
+    discordGuildId: string,
+    roleId: string,
+    roleCountsKey: string,
+    redis: ReturnType<RedisService['getClient']>,
+  ): Promise<number> {
+    const token = this.configService.get<string>('DISCORD_BOT_TOKEN');
+    if (!token) return 0;
+    const counts = new Map<string, number>();
+    let after: string | undefined;
+    const limit = 1000;
+    for (;;) {
+      const url = `${DISCORD_API_BASE}/guilds/${discordGuildId}/members?limit=${limit}${after ? `&after=${after}` : ''}`;
+      let response: { status: number; data?: Array<{ user?: { id: string }; roles?: string[] }> } | null = null;
+      try {
+        response = await firstValueFrom(
+          this.httpService.get<Array<{ user?: { id: string }; roles?: string[] }>>(url, {
+            headers: { Authorization: `Bot ${token}` },
+            validateStatus: (s) => s === 200,
+          }),
+        );
+      } catch {
+        break;
+      }
+      if (!response || response.status !== 200 || !Array.isArray(response.data)) break;
+      const members = response.data;
+      for (const m of members) {
+        const roles = m.roles ?? [];
+        for (const r of roles) {
+          counts.set(r, (counts.get(r) ?? 0) + 1);
+        }
+      }
+      if (members.length < limit) break;
+      after = members[members.length - 1]?.user?.id;
+      if (!after) break;
+    }
+    for (const [rid, count] of counts) {
+      await redis.hset(roleCountsKey, rid, String(count)).catch(() => {});
+    }
+    return counts.get(roleId) ?? 0;
   }
 
   private async checkRateLimit(rateLimitKey: string): Promise<boolean> {

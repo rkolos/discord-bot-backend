@@ -77,7 +77,9 @@ export class MultiTokenConnectionManagerService
           GatewayIntentBits.Guilds,
           GatewayIntentBits.GuildMembers,
           GatewayIntentBits.GuildMessages,
+          GatewayIntentBits.MessageContent, // привилегированный: content в MESSAGE_CREATE, MESSAGE_UPDATE, MESSAGE_DELETE
           GatewayIntentBits.GuildVoiceStates,
+          GatewayIntentBits.GuildPresences,
         ],
       });
 
@@ -143,6 +145,26 @@ export class MultiTokenConnectionManagerService
         }
       });
 
+      client.on('guildUpdate', async (_oldGuild, newGuild) => {
+        try {
+          await this.guildSync.onGuildUpdate({
+            discordGuildId: newGuild.id,
+            name: newGuild.name,
+            iconUrl: newGuild.iconURL(),
+            bannerUrl: newGuild.bannerURL(),
+          });
+        } catch (err) {
+          this.logger.warn(`guildUpdate sync error: ${(err as Error).message}`);
+        }
+      });
+
+      const publishDisconnected = (): void => {
+        const dgid = this.customGuildDiscordIds.get(guildIdUuid) ?? discordGuildId ?? '';
+        if (dgid) this.guildSync.publishBotDisconnected({ guildId: guildIdUuid, discordGuildId: dgid });
+      };
+      client.on('disconnect', publishDisconnected);
+      client.on('invalidated', publishDisconnected);
+
       client.on('guildMemberAdd', async (member) => {
         try {
           await this.eventsService.onGuildMemberAdd(member, client as import('discord.js').Client<true>);
@@ -191,6 +213,30 @@ export class MultiTokenConnectionManagerService
         }
       });
 
+      client.on('presenceUpdate', async (oldPresence, newPresence) => {
+        try {
+          await this.eventsService.onPresenceUpdate(oldPresence, newPresence, client as import('discord.js').Client<true>);
+        } catch (err) {
+          this.logger.warn(`presenceUpdate error: ${(err as Error).message}`);
+        }
+      });
+
+      client.on('threadCreate', async (thread) => {
+        try {
+          await this.eventsService.onThreadCreate(thread, client as import('discord.js').Client<true>);
+        } catch (err) {
+          this.logger.warn(`threadCreate error: ${(err as Error).message}`);
+        }
+      });
+
+      client.on('threadDelete', async (thread) => {
+        try {
+          await this.eventsService.onThreadDelete(thread, client as import('discord.js').Client<true>);
+        } catch (err) {
+          this.logger.warn(`threadDelete error: ${(err as Error).message}`);
+        }
+      });
+
       try {
         await client.login(token);
         this.customClients.set(guildIdUuid, client);
@@ -213,10 +259,11 @@ export class MultiTokenConnectionManagerService
       await this.interactionHandler.destroy();
       this.interactionHandler = null;
     }
-    const destroyPromises = Array.from(this.customClients.values()).map(
-      (client) => client.destroy(),
-    );
-    await Promise.all(destroyPromises);
+    for (const [guildIdUuid, client] of this.customClients) {
+      const discordGuildId = this.customGuildDiscordIds.get(guildIdUuid);
+      if (discordGuildId) this.guildSync.publishBotDisconnected({ guildId: guildIdUuid, discordGuildId });
+      await client.destroy();
+    }
     this.customClients.clear();
     this.customGuildDiscordIds.clear();
     this.logger.log('Multi-token: all custom clients destroyed');

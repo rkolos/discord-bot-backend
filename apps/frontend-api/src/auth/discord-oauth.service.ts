@@ -51,6 +51,9 @@ export class DiscordOAuthService {
   async buildLoginUrl(frontendRedirectUri?: string): Promise<{ state: string; url: string }> {
     const { clientId, oauthRedirectUri, frontendBaseUrl } =
       this.sharedConfig.discord;
+    // #region agent log
+    fetch('http://127.0.0.1:7244/ingest/d16c2cb1-2d26-4721-b47a-e24e77eb49f5', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'discord-oauth.service.ts:buildLoginUrl:entry', message: 'buildLoginUrl called', data: { frontendRedirectUri, clientIdSet: !!clientId, oauthRedirectUriSet: !!oauthRedirectUri, frontendBaseUrl }, timestamp: Date.now(), sessionId: 'debug-session', hypothesisId: 'discord-auth' }) }).catch(() => {});
+    // #endregion
     if (frontendRedirectUri != null && frontendBaseUrl != null) {
       try {
         const parsed = new URL(frontendRedirectUri);
@@ -61,6 +64,9 @@ export class DiscordOAuthService {
           parsed.origin !== allowedBase.origin ||
           normalizedPath !== expectedPath
         ) {
+          // #region agent log
+          fetch('http://127.0.0.1:7244/ingest/d16c2cb1-2d26-4721-b47a-e24e77eb49f5', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'discord-oauth.service.ts:buildLoginUrl:redirectUriMismatch', message: 'redirect_uri validation failed', data: { parsedOrigin: parsed.origin, allowedOrigin: allowedBase.origin, normalizedPath, expectedPath }, timestamp: Date.now(), sessionId: 'debug-session', hypothesisId: 'discord-auth' }) }).catch(() => {});
+          // #endregion
           throw new BadRequestException({
             code: 'VALIDATION_ERROR',
             message: 'redirect_uri must be {FRONTEND_BASE_URL}/login/callback',
@@ -69,6 +75,9 @@ export class DiscordOAuthService {
         }
       } catch (err) {
         if (err instanceof BadRequestException) throw err;
+        // #region agent log
+        fetch('http://127.0.0.1:7244/ingest/d16c2cb1-2d26-4721-b47a-e24e77eb49f5', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'discord-oauth.service.ts:buildLoginUrl:redirectUriParseError', message: 'redirect_uri parse failed', data: { frontendRedirectUri }, timestamp: Date.now(), sessionId: 'debug-session', hypothesisId: 'discord-auth' }) }).catch(() => {});
+        // #endregion
         throw new BadRequestException({
           code: 'VALIDATION_ERROR',
           message: 'redirect_uri must be a valid URL',
@@ -79,7 +88,15 @@ export class DiscordOAuthService {
     const state = randomBytes(32).toString('hex');
     const key = STATE_REDIS_KEY_PREFIX + state;
     const stateData: DiscordStateData = { redirectUri: frontendRedirectUri ?? null };
-    await this.redis.set(key, JSON.stringify(stateData), STATE_TTL_SECONDS);
+    try {
+      await this.redis.set(key, JSON.stringify(stateData), STATE_TTL_SECONDS);
+    } catch (redisErr) {
+      const redisErrMsg = redisErr instanceof Error ? redisErr.message : String(redisErr);
+      // #region agent log
+      fetch('http://127.0.0.1:7244/ingest/d16c2cb1-2d26-4721-b47a-e24e77eb49f5', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'discord-oauth.service.ts:buildLoginUrl:redisError', message: 'redis set failed', data: { error: redisErrMsg }, timestamp: Date.now(), sessionId: 'debug-session', hypothesisId: 'discord-auth' }) }).catch(() => {});
+      // #endregion
+      throw redisErr;
+    }
     const params = new URLSearchParams({
       client_id: clientId,
       redirect_uri: oauthRedirectUri,
@@ -88,6 +105,9 @@ export class DiscordOAuthService {
       state,
     });
     const url = `${OAUTH_AUTHORIZE_URL}?${params.toString()}`;
+    // #region agent log
+    fetch('http://127.0.0.1:7244/ingest/d16c2cb1-2d26-4721-b47a-e24e77eb49f5', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'discord-oauth.service.ts:buildLoginUrl:success', message: 'login url built', data: { urlLength: url.length, hasClientId: !!clientId, hasOauthRedirectUri: !!oauthRedirectUri }, timestamp: Date.now(), sessionId: 'debug-session', hypothesisId: 'discord-auth' }) }).catch(() => {});
+    // #endregion
     return { state, url };
   }
 

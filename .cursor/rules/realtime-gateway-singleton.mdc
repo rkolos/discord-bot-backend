@@ -1,0 +1,10 @@
+---
+description: WebSocket gateway должен зависеть только от singleton-провайдеров
+alwaysApply: true
+---
+
+# WebSocket Gateway: singleton зависимости
+
+- Для WebSocket gateway используйте только singleton‑провайдеры (DEFAULT scope).
+- Не инжектите request‑scoped сервисы в gateway: это делает gateway request‑scoped и ломает раннюю инициализацию (`afterInit`), что ведёт к очередям и "server not ready".
+- Если нужны данные запроса, передавайте их через контекст сокета или отдельные методы сервиса, а не через request‑scoped зависимости.

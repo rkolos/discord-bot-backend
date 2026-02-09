@@ -10,7 +10,7 @@ import { CountersService } from './counters.service';
 describe('CountersService', () => {
   let service: CountersService;
   let counterRepo: jest.Mocked<Repository<Counter>>;
-  let guildsService: jest.Mocked<Pick<GuildsService, 'findGuildByDiscordId'>>;
+  let guildsService: jest.Mocked<Pick<GuildsService, 'findGuildByIdOrDiscordId'>>;
   let queueService: jest.Mocked<Pick<CountersQueueService, 'addCounterUpdate' | 'addCounterDelete'>>;
 
   const guildId = 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11';
@@ -25,6 +25,7 @@ describe('CountersService', () => {
       channelName: 'Members: 1,234',
       type: CounterType.STAT,
       metric: CounterMetric.MEMBERS,
+      roleId: null,
       template: 'Members: {count}',
       status: CounterStatus.ACTIVE,
       currentValue: null,
@@ -45,7 +46,7 @@ describe('CountersService', () => {
       remove: jest.fn(),
     };
     const mockGuildsService = {
-      findGuildByDiscordId: jest.fn(),
+      findGuildByIdOrDiscordId: jest.fn(),
     };
     const mockQueueService = {
       addCounterUpdate: jest.fn().mockResolvedValue(undefined),
@@ -69,7 +70,7 @@ describe('CountersService', () => {
 
   describe('create', () => {
     it('creates counter and enqueues update', async () => {
-      guildsService.findGuildByDiscordId!.mockResolvedValue(mockGuild as never);
+      guildsService.findGuildByIdOrDiscordId!.mockResolvedValue(mockGuild as never);
       const created = createCounter();
       (counterRepo.create as jest.Mock).mockReturnValue(created);
       (counterRepo.save as jest.Mock).mockResolvedValue(created);
@@ -86,12 +87,12 @@ describe('CountersService', () => {
       expect(result.id).toBe(created.id);
       expect(result.channelId).toBe(dto.channelId);
       expect(result.template).toBe(dto.template);
-      expect(guildsService.findGuildByDiscordId).toHaveBeenCalledWith(discordGuildId);
+      expect(guildsService.findGuildByIdOrDiscordId).toHaveBeenCalledWith(discordGuildId);
       expect(queueService.addCounterUpdate).toHaveBeenCalledWith(created);
     });
 
     it('throws GUILD_NOT_FOUND when guild does not exist', async () => {
-      guildsService.findGuildByDiscordId!.mockResolvedValue(null as never);
+      guildsService.findGuildByIdOrDiscordId!.mockResolvedValue(null as never);
 
       const err = await service
         .create(discordGuildId, {
@@ -110,7 +111,7 @@ describe('CountersService', () => {
 
   describe('findAllByGuild', () => {
     it('returns counters for guild', async () => {
-      guildsService.findGuildByDiscordId!.mockResolvedValue(mockGuild as never);
+      guildsService.findGuildByIdOrDiscordId!.mockResolvedValue(mockGuild as never);
       const list = [createCounter()];
       (counterRepo.find as jest.Mock).mockResolvedValue(list);
 
@@ -118,11 +119,11 @@ describe('CountersService', () => {
 
       expect(result).toHaveLength(1);
       expect(result[0].id).toBe(list[0].id);
-      expect(guildsService.findGuildByDiscordId).toHaveBeenCalledWith(discordGuildId);
+      expect(guildsService.findGuildByIdOrDiscordId).toHaveBeenCalledWith(discordGuildId);
     });
 
     it('throws GUILD_NOT_FOUND when guild does not exist', async () => {
-      guildsService.findGuildByDiscordId!.mockResolvedValue(null as never);
+      guildsService.findGuildByIdOrDiscordId!.mockResolvedValue(null as never);
 
       await expect(service.findAllByGuild(discordGuildId)).rejects.toThrow(NotFoundException);
     });
@@ -130,7 +131,7 @@ describe('CountersService', () => {
 
   describe('update', () => {
     it('updates counter and enqueues update', async () => {
-      guildsService.findGuildByDiscordId!.mockResolvedValue(mockGuild as never);
+      guildsService.findGuildByIdOrDiscordId!.mockResolvedValue(mockGuild as never);
       const existing = createCounter();
       (counterRepo.findOne as jest.Mock).mockResolvedValue(existing);
       (counterRepo.save as jest.Mock).mockResolvedValue({ ...existing, template: 'Updated: {count}' });
@@ -144,7 +145,7 @@ describe('CountersService', () => {
     });
 
     it('throws COUNTER_NOT_FOUND when counter does not exist', async () => {
-      guildsService.findGuildByDiscordId!.mockResolvedValue(mockGuild as never);
+      guildsService.findGuildByIdOrDiscordId!.mockResolvedValue(mockGuild as never);
       (counterRepo.findOne as jest.Mock).mockResolvedValue(null);
 
       const err = await service
@@ -159,7 +160,7 @@ describe('CountersService', () => {
 
   describe('remove', () => {
     it('removes counter and enqueues delete', async () => {
-      guildsService.findGuildByDiscordId!.mockResolvedValue(mockGuild as never);
+      guildsService.findGuildByIdOrDiscordId!.mockResolvedValue(mockGuild as never);
       const existing = createCounter();
       (counterRepo.findOne as jest.Mock).mockResolvedValue(existing);
       (counterRepo.remove as jest.Mock).mockResolvedValue(undefined);
@@ -176,7 +177,7 @@ describe('CountersService', () => {
     });
 
     it('throws COUNTER_NOT_FOUND when counter does not exist', async () => {
-      guildsService.findGuildByDiscordId!.mockResolvedValue(mockGuild as never);
+      guildsService.findGuildByIdOrDiscordId!.mockResolvedValue(mockGuild as never);
       (counterRepo.findOne as jest.Mock).mockResolvedValue(null);
 
       await expect(service.remove(discordGuildId, 'missing-id')).rejects.toThrow(NotFoundException);

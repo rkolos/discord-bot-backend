@@ -12,7 +12,7 @@ describe('LogsService', () => {
   let service: LogsService;
   let logSettingsRepo: jest.Mocked<Repository<GuildLogSetting>>;
   let txRepo: { find: jest.Mock; create: jest.Mock; save: jest.Mock };
-  let guildsService: jest.Mocked<Pick<GuildsService, 'findGuildByDiscordId'>>;
+  let guildsService: jest.Mocked<Pick<GuildsService, 'findGuildByIdOrDiscordId'>>;
   let queueService: jest.Mocked<Pick<LogsQueueService, 'addLogsConfigUpdate'>>;
 
   const guildId = 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11';
@@ -42,7 +42,7 @@ describe('LogsService', () => {
       find: jest.fn(),
     };
     const mockGuildsService = {
-      findGuildByDiscordId: jest.fn(),
+      findGuildByIdOrDiscordId: jest.fn(),
     };
     const mockQueueService = {
       addLogsConfigUpdate: jest.fn().mockResolvedValue(undefined),
@@ -66,7 +66,7 @@ describe('LogsService', () => {
 
   describe('getSettings', () => {
     it('returns all event types with defaults when no rows exist', async () => {
-      guildsService.findGuildByDiscordId!.mockResolvedValue(mockGuild as never);
+      guildsService.findGuildByIdOrDiscordId!.mockResolvedValue(mockGuild as never);
       (logSettingsRepo.find as jest.Mock).mockResolvedValue([]);
 
       const result = await service.getSettings(discordGuildId);
@@ -74,11 +74,11 @@ describe('LogsService', () => {
       expect(result).toHaveLength(LOG_EVENT_TYPES.length);
       expect(result.every((r) => r.enabled === false && r.channelId === null)).toBe(true);
       expect(result.map((r) => r.eventType)).toEqual([...LOG_EVENT_TYPES]);
-      expect(guildsService.findGuildByDiscordId).toHaveBeenCalledWith(discordGuildId);
+      expect(guildsService.findGuildByIdOrDiscordId).toHaveBeenCalledWith(discordGuildId);
     });
 
     it('returns stored channelId and enabled for existing rows', async () => {
-      guildsService.findGuildByDiscordId!.mockResolvedValue(mockGuild as never);
+      guildsService.findGuildByIdOrDiscordId!.mockResolvedValue(mockGuild as never);
       (logSettingsRepo.find as jest.Mock).mockResolvedValue([
         { guildId, eventType: 'member_join', channelId: '987654321098765432', enabled: true },
       ]);
@@ -94,7 +94,7 @@ describe('LogsService', () => {
     });
 
     it('throws GUILD_NOT_FOUND when guild does not exist', async () => {
-      guildsService.findGuildByDiscordId!.mockResolvedValue(null as never);
+      guildsService.findGuildByIdOrDiscordId!.mockResolvedValue(null as never);
 
       const err = await service.getSettings(discordGuildId).catch((e) => e);
       expect(err).toBeInstanceOf(NotFoundException);
@@ -106,7 +106,7 @@ describe('LogsService', () => {
 
   describe('patchSettings', () => {
     it('creates new rows and calls addLogsConfigUpdate', async () => {
-      guildsService.findGuildByDiscordId!.mockResolvedValue(mockGuild as never);
+      guildsService.findGuildByIdOrDiscordId!.mockResolvedValue(mockGuild as never);
       txRepo.find.mockResolvedValue([]);
       txRepo.create.mockImplementation((entity: unknown) => entity);
       txRepo.save.mockResolvedValue(undefined);
@@ -125,7 +125,7 @@ describe('LogsService', () => {
     });
 
     it('updates existing row and calls addLogsConfigUpdate when channel_id or enabled changed', async () => {
-      guildsService.findGuildByDiscordId!.mockResolvedValue(mockGuild as never);
+      guildsService.findGuildByIdOrDiscordId!.mockResolvedValue(mockGuild as never);
       const existing = {
         guildId,
         eventType: 'member_join',
@@ -151,7 +151,7 @@ describe('LogsService', () => {
     });
 
     it('maps event types correctly when patching multiple settings', async () => {
-      guildsService.findGuildByDiscordId!.mockResolvedValue(mockGuild as never);
+      guildsService.findGuildByIdOrDiscordId!.mockResolvedValue(mockGuild as never);
       txRepo.find.mockResolvedValue([]);
       txRepo.create.mockImplementation((entity: unknown) => entity);
       txRepo.save.mockResolvedValue(undefined);

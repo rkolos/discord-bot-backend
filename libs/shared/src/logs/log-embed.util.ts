@@ -101,6 +101,16 @@ export function buildLogEmbedData(
           { name: 'Время', value: ts },
         ],
       };
+    case 'message_create':
+      return {
+        title: 'Сообщение отправлено',
+        fields: [
+          { name: 'Канал', value: channel },
+          { name: 'Автор', value: user },
+          { name: 'Содержимое', value: content.length > 1024 ? content.slice(0, 1021) + '...' : content },
+          { name: 'Время', value: ts },
+        ],
+      };
     case 'role_update':
       return {
         title: 'Обновление ролей',

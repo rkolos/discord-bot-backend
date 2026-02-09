@@ -148,18 +148,26 @@ Get metrics for all job queues (BullMQ).
 {
   "data": [
     {
-      "queueName": "analytics-queue",
-      "active": 5,
-      "waiting": 150,
-      "delayed": 20,
+      "queueName": "workers-queue-counters-update",
+      "active": 2,
+      "waiting": 45,
+      "delayed": 10,
+      "failed": 0,
+      "paused": false
+    },
+    {
+      "queueName": "ingestor-raw-events",
+      "active": 1,
+      "waiting": 1250,
+      "delayed": 0,
       "failed": 3,
       "paused": false
     },
     {
-      "queueName": "interaction-queue",
-      "active": 10,
-      "waiting": 200,
-      "delayed": 15,
+      "queueName": "workers-queue-welcome-goodbye-config",
+      "active": 0,
+      "waiting": 0,
+      "delayed": 0,
       "failed": 0,
       "paused": false
     }
@@ -189,7 +197,7 @@ Get list of stalled BullMQ jobs — jobs that were taken by workers but not comp
 - `Authorization: Bearer <token>`
 
 **Query Parameters:**
-- `queueName?: string` - Filter by queue name (e.g., `"analytics-queue"`, `"interaction-queue"`)
+- `queueName?: string` - Filter by queue name (e.g., `"workers-queue-counters-update"`, `"ingestor-raw-events"`)
 
 **Response:** `200 OK`
 ```json
@@ -197,7 +205,7 @@ Get list of stalled BullMQ jobs — jobs that were taken by workers but not comp
   "data": [
     {
       "jobId": "123",
-      "queueName": "analytics-queue",
+      "queueName": "workers-queue-counters-update",
       "jobName": "updateCounter",
       "timestamp": "2024-01-27T12:00:00.000Z",
       "attempts": 2
@@ -223,7 +231,7 @@ Retry all failed jobs in a specific queue.
 - `Authorization: Bearer <token>`
 
 **Path Parameters:**
-- `name: string` - Queue name (e.g., `"analytics-queue"`, `"interaction-queue"`)
+- `name: string` - Queue name (e.g., `"workers-queue-counters-update"`, `"ingestor-raw-events"`)
 
 **Response:** `200 OK`
 ```json

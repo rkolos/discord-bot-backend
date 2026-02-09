@@ -146,7 +146,7 @@ export class GuildSetupConsumer implements OnModuleInit, OnModuleDestroy {
       lastConnected: null,
       lastSyncAt: null,
       dataRetentionDays: 0,
-      anonymizeUserData: true,
+      anonymizeUserData: false,
       shareAnalytics: true,
       allowPublicWidgets: true,
       updatedAt: new Date(),

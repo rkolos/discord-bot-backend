@@ -130,3 +130,12 @@ sn:prod:frontend-api:auth:session:{sessionId}
   - **Payload:** `{ discordUserId: string }` — Discord Snowflake ID пользователя; выполняется `ALTER TABLE raw_events DELETE WHERE discord_user_id = :discordUserId`.
 
 > **Важно:** имена очередей в BullMQ должны совпадать в producer/consumer и быть одинаковыми во всех средах через префикс `sn:{env}`.
+
+## 4.3.7 Redis Pub/Sub (Real-time guild state)
+
+- `sn:{env}:frontend-api:channel:guild-state`
+  - **Тип:** Pub/Sub channel
+  - **Publisher:** Ingestor Worker, Bot Service (при изменении статуса импорта, счётчиков, участников, голоса, веток и т.д.).
+  - **Subscriber:** Frontend API (пересылает события в WebSocket-комнаты по guildId).
+  - **Payload (JSON):** `GuildStateEventPayload` — `guildId` (UUID), `discordGuildId` (Snowflake), `parameter`, `direction` (`set`|`inc`|`dec`), `delta?`, `value?`, `timestamp` (ISO 8601). Параметры: `historySyncStatus`, `memberCount`, `onlineMembers`, `totalMessages`, `threadCreated`, `lastActivity`, `bot_status`, `isBotInGuild`, `guildInfo`, `botConnected`, `lastSyncAt`, `voiceOnline`.
+  - **Назначение:** доставка событий изменения состояния гильдий на фронтенд в реальном времени через WebSocket.

@@ -16,6 +16,27 @@ describe('Counter type mapping', () => {
     });
   });
 
+  it('maps members_idle to stat + idle', () => {
+    expect(DISPLAY_TYPE_TO_API.members_idle).toEqual({
+      type: CounterType.STAT,
+      metric: CounterMetric.IDLE,
+    });
+  });
+
+  it('maps members_dnd to stat + dnd', () => {
+    expect(DISPLAY_TYPE_TO_API.members_dnd).toEqual({
+      type: CounterType.STAT,
+      metric: CounterMetric.DND,
+    });
+  });
+
+  it('maps members_offline to stat + offline', () => {
+    expect(DISPLAY_TYPE_TO_API.members_offline).toEqual({
+      type: CounterType.STAT,
+      metric: CounterMetric.OFFLINE,
+    });
+  });
+
   it('maps members_bots to stat + bots', () => {
     expect(DISPLAY_TYPE_TO_API.members_bots).toEqual({
       type: CounterType.STAT,

@@ -11,6 +11,7 @@ import { CountersQueueProducerModule } from './counters-queue-producer/counters-
 import { GuildReconciliationModule } from './guild-sync/guild-reconciliation.module';
 import { GuildSyncModule } from './guild-sync/guild-sync.module';
 import { LogsConsumerModule } from './logs-consumer/logs-consumer.module';
+import { WelcomeGoodbyeConsumerModule } from './welcome-goodbye-consumer/welcome-goodbye-consumer.module';
 import { HealthModule } from './health/health.module';
 import { InternalModule } from './internal/internal.module';
 import { MultiTokenModule } from './multi-token/multi-token.module';
@@ -32,6 +33,7 @@ import { ShardingModule } from './sharding/sharding.module';
     CountersConsumerModule,
     CountersQueueProducerModule,
     LogsConsumerModule,
+    WelcomeGoodbyeConsumerModule,
     InternalModule,
     HealthModule,
   ],

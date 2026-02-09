@@ -69,8 +69,23 @@ export class AuthController {
     @Query('redirect_uri') redirectUriFromQuery: string | undefined,
     @Res() res: Response,
   ): Promise<void> {
-    const { url } = await this.discordOAuth.buildLoginUrl(redirectUriFromQuery);
-    res.redirect(302, url);
+    // #region agent log
+    fetch('http://127.0.0.1:7244/ingest/d16c2cb1-2d26-4721-b47a-e24e77eb49f5', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'auth.controller.ts:discordLogin:entry', message: 'discord login requested', data: { redirect_uri: redirectUriFromQuery }, timestamp: Date.now(), sessionId: 'debug-session', hypothesisId: 'discord-auth' }) }).catch(() => {});
+    // #endregion
+    try {
+      const { url } = await this.discordOAuth.buildLoginUrl(redirectUriFromQuery);
+      // #region agent log
+      fetch('http://127.0.0.1:7244/ingest/d16c2cb1-2d26-4721-b47a-e24e77eb49f5', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'auth.controller.ts:discordLogin:beforeRedirect', message: 'redirecting to Discord', data: { url, urlLength: url?.length }, timestamp: Date.now(), sessionId: 'debug-session', hypothesisId: 'discord-auth' }) }).catch(() => {});
+      // #endregion
+      res.redirect(302, url);
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      const errCode = err && typeof err === 'object' && 'getStatus' in err && typeof (err as { getStatus: () => number }).getStatus === 'function' ? (err as { getStatus: () => number }).getStatus() : 500;
+      // #region agent log
+      fetch('http://127.0.0.1:7244/ingest/d16c2cb1-2d26-4721-b47a-e24e77eb49f5', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'auth.controller.ts:discordLogin:catch', message: 'discord login error', data: { error: errMsg, statusCode: errCode }, timestamp: Date.now(), sessionId: 'debug-session', hypothesisId: 'discord-auth' }) }).catch(() => {});
+      // #endregion
+      throw err;
+    }
   }
 
   @Get('discord/add-bot')

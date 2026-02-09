@@ -61,6 +61,7 @@ services:
     environment:
       NODE_ENV: development
       PORT: 3001
+      DEBUG_LOG_PATH: /app/.cursor/debug.log
       FRONTEND_API_URL: http://localhost:3001
       POSTGRES_HOST: postgres
       DB_HOST: postgres
@@ -122,6 +123,7 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: 6379
       CLICKHOUSE_HOST: clickhouse
+      DEBUG_LOG_PATH: /app/.cursor/debug.log
     volumes:
       - .:/app
       - /app/node_modules

@@ -38,7 +38,8 @@ export class ShardingManagerService implements OnModuleInit, OnModuleDestroy {
       });
     });
 
-    await this.manager.spawn();
+    const spawnTimeoutMs = this.configService.get<number>('SHARD_READY_TIMEOUT_MS') ?? 90_000;
+    await this.manager.spawn({ timeout: spawnTimeoutMs });
     this.logger.log('ShardingManager spawned all shards');
   }
 

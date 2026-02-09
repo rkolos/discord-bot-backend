@@ -13,10 +13,13 @@ import {
   Guild,
   RedisService,
   ServerSettings,
+  SharedConfigService,
+  publishGuildStateEvent,
 } from '@app/shared';
 
 const DISCORD_API_BASE = 'https://discord.com/api/v10';
 const SYNC_LOCK_TTL_SEC = 120;
+const ONLINE_MEMBERS_LAST_PREFIX = 'bot-service:guild-state:online-members:';
 
 interface DiscordGuildResponse {
   name?: string;
@@ -38,6 +41,7 @@ export class GuildSyncInternalService {
     private readonly crypto: CryptoService,
     private readonly configService: ConfigService,
     private readonly redis: RedisService,
+    private readonly sharedConfig: SharedConfigService,
   ) {}
 
   async syncGuild(guildId: string): Promise<{
@@ -90,6 +94,37 @@ export class GuildSyncInternalService {
         settings.lastSyncAt = new Date();
         await this.serverSettingsRepository.save(settings);
       }
+
+      publishGuildStateEvent(this.redis.getClient(), this.sharedConfig.redis.prefix, {
+        guildId: guild.id,
+        discordGuildId: guild.discordGuildId,
+        parameter: 'guildInfo',
+        direction: 'set',
+        value: {
+          name: guild.name,
+          iconUrl: guild.iconUrl ?? null,
+          banner: guild.banner ?? null,
+        },
+      });
+      if (settings?.lastSyncAt) {
+        publishGuildStateEvent(this.redis.getClient(), this.sharedConfig.redis.prefix, {
+          guildId: guild.id,
+          discordGuildId: guild.discordGuildId,
+          parameter: 'lastSyncAt',
+          direction: 'set',
+          value: settings.lastSyncAt.toISOString(),
+        });
+      }
+      const onlineMembersValue = guild.onlineMembers ?? 0;
+      publishGuildStateEvent(this.redis.getClient(), this.sharedConfig.redis.prefix, {
+        guildId: guild.id,
+        discordGuildId: guild.discordGuildId,
+        parameter: 'onlineMembers',
+        direction: 'set',
+        value: onlineMembersValue,
+      });
+      const lastKey = `${this.sharedConfig.redis.prefix}${ONLINE_MEMBERS_LAST_PREFIX}${guild.id}`;
+      await this.redis.getClient().set(lastKey, String(onlineMembersValue)).catch(() => {});
 
       const syncedAt = new Date().toISOString();
       return { success: true, syncedAt };

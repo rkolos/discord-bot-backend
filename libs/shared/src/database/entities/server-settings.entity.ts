@@ -47,7 +47,7 @@ export class ServerSettings {
   @Column({ name: 'data_retention_days', type: 'int', default: 0 })
   dataRetentionDays: number;
 
-  @Column({ name: 'anonymize_user_data', type: 'boolean', default: true })
+  @Column({ name: 'anonymize_user_data', type: 'boolean', default: false })
   anonymizeUserData: boolean;
 
   @Column({ name: 'share_analytics', type: 'boolean', default: true })

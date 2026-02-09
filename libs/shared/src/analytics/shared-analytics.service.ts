@@ -32,6 +32,80 @@ export class SharedAnalyticsService {
     return this.parseSingleNumber(result, 0);
   }
 
+  /**
+   * Всего сообщений по гильдии за всё время (из mv_daily_activity).
+   * При ошибке запроса к ClickHouse исключение пробрасывается.
+   */
+  async getTotalMessagesByGuildId(guildId: string): Promise<number> {
+    const db = this.getDatabase();
+    const result = await this.clickhouse.query({
+      query: `
+        SELECT sum(messages) AS total
+        FROM (
+          SELECT countIfMerge(messages_count) AS messages
+          FROM ${db}.mv_daily_activity
+          WHERE guild_id = {guildId:UUID}
+          GROUP BY guild_id, event_date
+        )
+      `,
+      query_params: { guildId },
+    });
+    return this.parseSingleNumber(result, 0);
+  }
+
+  /**
+   * Глобальная сумма сообщений по всем гильдиям (из mv_daily_activity).
+   * При ошибке запроса к ClickHouse исключение пробрасывается.
+   */
+  async getGlobalTotalMessages(): Promise<number> {
+    const db = this.getDatabase();
+    const result = await this.clickhouse.query({
+      query: `
+        SELECT sum(messages) AS total
+        FROM (
+          SELECT countIfMerge(messages_count) AS messages
+          FROM ${db}.mv_daily_activity
+          GROUP BY guild_id, event_date
+        )
+      `,
+      query_params: {},
+    });
+    return this.parseSingleNumber(result, 0);
+  }
+
+  /**
+   * Маппинг guild_id → всего сообщений за всё время для списка гильдий.
+   * Пустой guildIds → пустая Map. При ошибке запроса исключение пробрасывается.
+   */
+  async getTotalMessagesByGuildIds(guildIds: string[]): Promise<Map<string, number>> {
+    const map = new Map<string, number>();
+    if (guildIds.length === 0) return map;
+    const db = this.getDatabase();
+    const result = await this.clickhouse.query({
+      query: `
+        SELECT guild_id, sum(messages) AS total
+        FROM (
+          SELECT guild_id, event_date, countIfMerge(messages_count) AS messages
+          FROM ${db}.mv_daily_activity
+          WHERE guild_id IN {guildIds:Array(UUID)}
+          GROUP BY guild_id, event_date
+        )
+        GROUP BY guild_id
+      `,
+      query_params: { guildIds },
+    });
+    const rows = (await result.json()) as { guild_id: string; total: string | number }[];
+    const data = Array.isArray(rows)
+      ? rows
+      : (rows as unknown as { data?: typeof rows }).data ?? [];
+    for (const row of data) {
+      if (row?.guild_id != null) {
+        map.set(row.guild_id, Number(row.total ?? 0));
+      }
+    }
+    return map;
+  }
+
   async getOverviewByGuildId(
     guildId: string,
     timezone?: string,
@@ -113,6 +187,11 @@ export class SharedAnalyticsService {
     };
   }
 
+  /**
+   * Временной ряд по дням: сообщения, уникальные активные участники, минуты в голосе.
+   * Запрос к raw_events, чтобы учитывать всю историю (в т.ч. данные до создания MV).
+   * Отсутствующие дни в периоде заполняются нулями (по спецификации API).
+   */
   async getActivityChartByGuildId(
     guildId: string,
     from: string,
@@ -127,10 +206,10 @@ export class SharedAnalyticsService {
       query: `
         SELECT
           event_date AS date,
-          countIfMerge(messages_count) AS messages,
-          uniqCombinedMerge(unique_users_count) AS members,
-          sumMerge(voice_minutes) AS voiceMinutes
-        FROM ${db}.mv_daily_activity
+          countIf(event_type = 'MESSAGE_CREATE') AS messages,
+          uniqCombinedIf(if(empty(discord_user_id), toString(user_id), discord_user_id), (discord_user_id != '' OR user_id IS NOT NULL)) AS members,
+          sumIf(toUInt64(JSONExtractInt(payload, 'voiceMinutes')), event_type = 'VOICE_STATE_UPDATE') AS voiceMinutes
+        FROM ${db}.raw_events
         WHERE guild_id = {guildId:UUID}
           AND event_date >= {from:Date}
           AND event_date <= {to:Date}
@@ -140,46 +219,76 @@ export class SharedAnalyticsService {
       query_params: { guildId, from: fromDate, to: toDate },
     });
 
-    const rows = (await result.json()) as ActivityChartPointDto[];
+    const rows = (await result.json()) as {
+      date: string;
+      messages: string | number;
+      members: string | number;
+      voiceMinutes: string | number;
+    }[];
     const data = Array.isArray(rows)
       ? rows
-      : (rows as unknown as { data?: ActivityChartPointDto[] }).data ?? [];
-    return (
-      data as {
-        date: string;
-        messages: string | number;
-        members: string | number;
-        voiceMinutes: string | number;
-      }[]
-    ).map((row) => ({
-      date: String(row.date),
-      messages: Number(row.messages ?? 0),
-      members: Number(row.members ?? 0),
-      voiceMinutes: Number(row.voiceMinutes ?? 0),
-    }));
+      : (rows as unknown as { data?: typeof rows }).data ?? [];
+    const byDate = new Map<string, ActivityChartPointDto>();
+    for (const row of data) {
+      const d = String(row.date).slice(0, 10);
+      byDate.set(d, {
+        date: d,
+        messages: Number(row.messages ?? 0),
+        members: Number(row.members ?? 0),
+        voiceMinutes: Number(row.voiceMinutes ?? 0),
+      });
+    }
+    const out: ActivityChartPointDto[] = [];
+    const fromMs = new Date(fromDate).getTime();
+    const toMs = new Date(toDate).getTime();
+    const oneDay = 86400000;
+    for (let t = fromMs; t <= toMs; t += oneDay) {
+      const d = new Date(t).toISOString().slice(0, 10);
+      out.push(
+        byDate.get(d) ?? {
+          date: d,
+          messages: 0,
+          members: 0,
+          voiceMinutes: 0,
+        },
+      );
+    }
+    return out;
   }
 
+  /**
+   * Топ участников по сообщениям/голосу. Группировка по эффективному идентификатору пользователя
+   * (discord_user_id или anonymized_hash/user_id), чтобы корректно учитывать данные из history-sync и real-time.
+   * При anonymizeUserData === false из payload извлекается userTag для отображения имени.
+   */
   async getTopMembersByGuildId(
     guildId: string,
     sortBy: 'messages' | 'voice',
     limit: number,
+    options?: { anonymizeUserData?: boolean },
   ): Promise<TopMemberDto[]> {
     const db = this.getDatabase();
+    const anonymizeUserData = options?.anonymizeUserData ?? true;
+    const tableRawEvents = `${db}.raw_events`;
 
     const orderBy =
       sortBy === 'voice'
-        ? 'sum(voice_minutes) DESC, sum(message_count) DESC'
-        : 'sum(message_count) DESC, sum(voice_minutes) DESC';
+        ? 'voice_minutes DESC, messages DESC'
+        : 'messages DESC, voice_minutes DESC';
 
     const result = await this.clickhouse.query({
       query: `
         SELECT
-          user_id AS id,
-          sum(message_count) AS messages,
-          sum(voice_minutes) AS voiceMinutes
-        FROM ${db}.mv_top_members
+          if(empty(discord_user_id), if(notEmpty(anonymized_hash), anonymized_hash, toString(user_id)), discord_user_id) AS id,
+          argMax(JSONExtractString(payload, 'userTag'), event_time) AS username_from_payload,
+          argMax(JSONExtractString(payload, 'avatar'), event_time) AS avatar_hash,
+          countIf(event_type = 'MESSAGE_CREATE') AS messages,
+          sumIf(toUInt64(JSONExtractInt(payload, 'voiceMinutes')), event_type = 'VOICE_STATE_UPDATE') AS voice_minutes
+        FROM ${tableRawEvents}
         WHERE guild_id = {guildId:UUID}
-        GROUP BY guild_id, user_id
+          AND is_bot_generated = 0
+          AND (discord_user_id != '' OR user_id IS NOT NULL OR notEmpty(anonymized_hash))
+        GROUP BY guild_id, if(empty(discord_user_id), if(notEmpty(anonymized_hash), anonymized_hash, toString(user_id)), discord_user_id)
         ORDER BY ${orderBy}
         LIMIT {limit:UInt32}
       `,
@@ -188,22 +297,83 @@ export class SharedAnalyticsService {
 
     const rows = (await result.json()) as {
       id: string;
+      username_from_payload: string;
+      avatar_hash: string;
       messages: string | number;
-      voiceMinutes: string | number;
+      voice_minutes: string | number;
     }[];
     const data = Array.isArray(rows)
       ? rows
       : (rows as unknown as { data?: typeof rows }).data ?? [];
     return data.map((row) => ({
       id: row.id ?? '',
-      username: 'Anonymous',
+      username:
+        anonymizeUserData || !row.username_from_payload
+          ? 'Anonymous'
+          : row.username_from_payload,
       discriminator: '',
-      avatar: '',
+      avatar:
+        !anonymizeUserData && row.avatar_hash && row.id
+          ? `https://cdn.discordapp.com/avatars/${row.id}/${row.avatar_hash}.png?size=80`
+          : '',
       messages: Number(row.messages ?? 0),
-      voiceMinutes: Number(row.voiceMinutes ?? 0),
+      voiceMinutes: Number(row.voice_minutes ?? 0),
     }));
   }
 
+  /**
+   * Тепловая карта активности по дням недели (0=воскресенье, 6=суббота) и часам (0–23).
+   * Данные из mv_heatmap (MESSAGE_CREATE). Возвращает все 7×24 ячейки; отсутствующие — 0.
+   */
+  async getHeatmapByGuildId(
+    guildId: string,
+  ): Promise<Array<{ dayOfWeek: number; hour: number; value: number }>> {
+    const db = this.getDatabase();
+    const result = await this.clickhouse.query({
+      query: `
+        SELECT
+          toUInt8(day_of_week % 7) AS day_of_week,
+          toUInt8(hour) AS hour,
+          sum(events_count) AS value
+        FROM ${db}.mv_heatmap
+        WHERE guild_id = {guildId:UUID}
+        GROUP BY guild_id, day_of_week, hour
+      `,
+      query_params: { guildId },
+    });
+    const rows = (await result.json()) as {
+      day_of_week: string | number;
+      hour: string | number;
+      value: string | number;
+    }[];
+    const data = Array.isArray(rows)
+      ? rows
+      : (rows as unknown as { data?: typeof rows }).data ?? [];
+    const map = new Map<string, number>();
+    for (const row of data) {
+      const d = Number(row.day_of_week ?? 0);
+      const h = Number(row.hour ?? 0);
+      if (d >= 0 && d <= 6 && h >= 0 && h <= 23) {
+        map.set(`${d}-${h}`, Number(row.value ?? 0));
+      }
+    }
+    const out: Array<{ dayOfWeek: number; hour: number; value: number }> = [];
+    for (let dayOfWeek = 0; dayOfWeek < 7; dayOfWeek++) {
+      for (let hour = 0; hour < 24; hour++) {
+        out.push({
+          dayOfWeek,
+          hour,
+          value: map.get(`${dayOfWeek}-${hour}`) ?? 0,
+        });
+      }
+    }
+    return out;
+  }
+
+  /**
+   * Распределение событий по ролям за период (Activity by Role).
+   * Запрос к raw_events, чтобы учитывать всю историю (в т.ч. данные до создания MV).
+   */
   async getRoleDistributionByGuildId(
     guildId: string,
     from: string,
@@ -217,9 +387,10 @@ export class SharedAnalyticsService {
       query: `
         SELECT
           role_id AS id,
-          sum(events_count) AS count
-        FROM ${db}.mv_role_stats
+          count() AS count
+        FROM ${db}.raw_events
         WHERE guild_id = {guildId:UUID}
+          AND role_id != ''
           AND event_date >= {from:Date}
           AND event_date <= {to:Date}
         GROUP BY guild_id, role_id
@@ -238,6 +409,10 @@ export class SharedAnalyticsService {
     }));
   }
 
+  /**
+   * Топ текстовых каналов по числу сообщений за период.
+   * Запрос к raw_events, чтобы учитывать всю историю (в т.ч. данные, попавшие в БД до создания MV).
+   */
   async getTopChannelsByMessages(
     guildId: string,
     from: string,
@@ -252,9 +427,11 @@ export class SharedAnalyticsService {
       query: `
         SELECT
           channel_id AS id,
-          sum(messages_count) AS value
-        FROM ${db}.mv_top_channels_messages
+          count() AS value
+        FROM ${db}.raw_events
         WHERE guild_id = {guildId:UUID}
+          AND event_type = 'MESSAGE_CREATE'
+          AND channel_id != ''
           AND event_date >= {from:Date}
           AND event_date <= {to:Date}
         GROUP BY guild_id, channel_id
@@ -274,6 +451,10 @@ export class SharedAnalyticsService {
     }));
   }
 
+  /**
+   * Топ голосовых каналов по минутам в голосе за период.
+   * Запрос к raw_events, чтобы учитывать всю историю (в т.ч. данные до создания MV).
+   */
   async getTopChannelsByVoice(
     guildId: string,
     from: string,
@@ -288,9 +469,11 @@ export class SharedAnalyticsService {
       query: `
         SELECT
           channel_id AS id,
-          sum(voice_minutes) AS value
-        FROM ${db}.mv_top_channels_voice
+          sum(toUInt64(JSONExtractInt(payload, 'voiceMinutes'))) AS value
+        FROM ${db}.raw_events
         WHERE guild_id = {guildId:UUID}
+          AND event_type = 'VOICE_STATE_UPDATE'
+          AND channel_id != ''
           AND event_date >= {from:Date}
           AND event_date <= {to:Date}
         GROUP BY guild_id, channel_id

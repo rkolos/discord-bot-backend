@@ -1,8 +1,11 @@
 import { NestFactory } from '@nestjs/core';
+import { FilteredBootstrapLogger } from '@app/shared';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, {
+    logger: new FilteredBootstrapLogger(),
+  });
   app.enableShutdownHooks();
 
   const port = process.env.PORT ?? process.env.HEALTH_PORT ?? 3002;

@@ -1,5 +1,6 @@
 import { Injectable, OnModuleDestroy } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import { In } from 'typeorm';
 import { Repository } from 'typeorm';
 import { Queue } from 'bullmq';
 import {
@@ -37,12 +38,37 @@ export class CountersQueueProducerService implements OnModuleDestroy {
       channel_id: counter.channelId,
       type: counter.type,
       metric: counter.metric,
+      role_id: counter.roleId ?? undefined,
     } as CounterUpdateJobPayload, { priority: 0 });
+  }
+
+  async addCounterUpdatesForGuildRoles(guildId: string, roleIds: string[]): Promise<void> {
+    if (roleIds.length === 0) return;
+    const counters = await this.counterRepository.find({
+      where: { guildId, metric: CounterMetric.ROLE, roleId: In(roleIds) },
+      select: ['id', 'guildId', 'channelId', 'type', 'metric', 'roleId'],
+    });
+    for (const c of counters) {
+      await this.addCounterUpdate(c as Counter);
+    }
   }
 
   async addCounterUpdatesForGuildMembers(guildId: string): Promise<void> {
     const counters = await this.counterRepository.find({
       where: { guildId, metric: CounterMetric.MEMBERS },
+      select: ['id', 'guildId', 'channelId', 'type', 'metric'],
+    });
+    for (const c of counters) {
+      await this.addCounterUpdate(c as Counter);
+    }
+  }
+
+  async addCounterUpdatesForGuildPresence(guildId: string): Promise<void> {
+    const counters = await this.counterRepository.find({
+      where: {
+        guildId,
+        metric: In([CounterMetric.ONLINE, CounterMetric.IDLE, CounterMetric.DND, CounterMetric.OFFLINE]),
+      },
       select: ['id', 'guildId', 'channelId', 'type', 'metric'],
     });
     for (const c of counters) {

@@ -1,7 +1,7 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Guild, User, SubscriptionPlan } from '@app/shared';
+import { Guild, User, SubscriptionPlan, SharedAnalyticsService } from '@app/shared';
 
 export interface FeatureItem {
   id: string;
@@ -55,6 +55,7 @@ export class PublicService {
     private readonly userRepository: Repository<User>,
     @InjectRepository(SubscriptionPlan)
     private readonly subscriptionPlanRepository: Repository<SubscriptionPlan>,
+    private readonly sharedAnalytics: SharedAnalyticsService,
   ) {}
 
   async getFeatures(): Promise<FeatureItem[]> {
@@ -166,19 +167,28 @@ export class PublicService {
     totalUsers: number;
     totalMessages: number;
   }> {
-    const [guildCount, userCount] = await Promise.all([
+    const [guildCount, userCount, totalMessages] = await Promise.all([
       this.guildRepository.count(),
       this.userRepository.count(),
+      this.getGlobalTotalMessagesOrThrow(),
     ]);
-    const guilds = await this.guildRepository
-      .createQueryBuilder('g')
-      .select('COALESCE(SUM(g.message_count), 0)', 'sum')
-      .getRawOne<{ sum: string }>();
-    const totalMessages = Number(guilds?.sum ?? 0);
     return {
       totalServers: guildCount,
       totalUsers: userCount,
       totalMessages,
     };
+  }
+
+  private async getGlobalTotalMessagesOrThrow(): Promise<number> {
+    try {
+      return await this.sharedAnalytics.getGlobalTotalMessages();
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : 'Unknown error';
+      throw new ServiceUnavailableException({
+        code: 'ANALYTICS_UNAVAILABLE',
+        message: `Analytics storage (ClickHouse) is temporarily unavailable. ${message}`,
+      });
+    }
   }
 }

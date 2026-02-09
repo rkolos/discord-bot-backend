@@ -1,5 +1,7 @@
-/** Имя очереди (BullMQ не допускает ":" в имени). Полный ключ Redis: sn:{env}:workers-queue-counters-update */
-export const COUNTERS_UPDATE_QUEUE_NAME = 'workers-queue-counters-update';
+import { COUNTERS_UPDATE_QUEUE_NAME } from '../queues/queue-names.constants';
+
+// Реэкспорт константы для обратной совместимости
+export { COUNTERS_UPDATE_QUEUE_NAME };
 
 export interface CounterUpdateJobPayload {
   counter_id: string;
@@ -7,4 +9,5 @@ export interface CounterUpdateJobPayload {
   channel_id: string;
   type: string;
   metric?: string | null;
+  role_id?: string | null;
 }

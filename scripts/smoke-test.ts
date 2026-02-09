@@ -280,6 +280,11 @@ async function runFrontend(seed: SeedOutput): Promise<string | null> {
     { token },
   );
   record(activitySparkline, 'Frontend');
+  const validLevels = ['live', 'active', 'quiet'] as const;
+  const level = activitySparkline?.level;
+  if (typeof level !== 'string' || !validLevels.includes(level as (typeof validLevels)[number])) {
+    log('  WARN: activity-sparkline response missing or invalid level (expected live | active | quiet)');
+  }
 
   const toDate = new Date().toISOString().slice(0, 10);
   const fromDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);

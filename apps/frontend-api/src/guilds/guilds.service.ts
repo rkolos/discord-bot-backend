@@ -1,16 +1,14 @@
 import {
-  HttpException,
-  HttpStatus,
   Injectable,
   Logger,
   NotFoundException,
-  UnauthorizedException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { QueryFailedError, Repository } from 'typeorm';
 import {
   Guild,
   GuildModule,
@@ -22,42 +20,25 @@ import {
 } from '@app/shared';
 import { CryptoService, RedisService } from '@app/shared';
 import { SharedConfigService } from '@app/shared';
-import { DiscordOAuthService } from '../auth/discord-oauth.service';
 import { HistorySyncQueueService } from './history-sync-queue.service';
+import { GuildContextService } from './guild-context.service';
+import { GuildsRealtimeService } from './guilds-realtime.service';
 import { UserGuildDto } from './dto/user-guild.dto';
 import {
   ALLOWED_MODULE_KEYS,
   GUILD_SETTINGS_CHANGED_CHANNEL_SUFFIX,
   MODULE_DISPLAY_NAMES,
+  computeActivityLevel,
 } from './constants';
-import type { AllowedModuleKey } from './constants';
+import type { ActivityLevel, AllowedModuleKey } from './constants';
 import type { PatchGuildModulesDto } from './dto/patch-guild-modules.dto';
 import type { PatchGuildTokenDto } from './dto/patch-guild-token.dto';
 
 const DISCORD_API_BASE = 'https://discord.com/api/v10';
-const GUILDS_CACHE_KEY_PREFIX = 'guilds:cache:';
 /** Discord channel type: GUILD_TEXT */
 const CHANNEL_TYPE_TEXT = 0;
 /** Discord channel type: GUILD_VOICE */
 const CHANNEL_TYPE_VOICE = 2;
-const GUILDS_CACHE_TTL_SECONDS = 300; // 5 min
-
-/** Administrator = 0x8, Manage Guild = 0x20 */
-const REQUIRED_PERMISSION_BITS = 0x8 | 0x20;
-
-export interface DiscordPartialGuild {
-  id: string;
-  name: string;
-  icon: string | null;
-  owner: boolean;
-  permissions: string;
-}
-
-function hasManageOrAdmin(permissionsStr: string): boolean {
-  const perm = BigInt(permissionsStr);
-  const required = BigInt(REQUIRED_PERMISSION_BITS);
-  return (perm & required) !== BigInt(0);
-}
 
 const DEFAULT_GUILD_NAME = 'Server';
 const DEFAULT_LANGUAGE = 'en';
@@ -103,7 +84,6 @@ export class GuildsService {
   private readonly logger = new Logger(GuildsService.name);
 
   constructor(
-    private readonly discordOAuth: DiscordOAuthService,
     private readonly httpService: HttpService,
     private readonly redis: RedisService,
     private readonly crypto: CryptoService,
@@ -119,7 +99,17 @@ export class GuildsService {
     private readonly companyMemberRepository: Repository<CompanyMember>,
     private readonly historySyncQueue: HistorySyncQueueService,
     private readonly sharedAnalytics: SharedAnalyticsService,
+    private readonly guildContext: GuildContextService,
+    private readonly guildsRealtime: GuildsRealtimeService,
   ) {}
+
+  private throwAnalyticsUnavailable(err: unknown): never {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    throw new ServiceUnavailableException({
+      code: 'ANALYTICS_UNAVAILABLE',
+      message: `Analytics storage (ClickHouse) is temporarily unavailable. ${message}`,
+    });
+  }
 
   async getMeGuildsPaginated(
     userId: string,
@@ -158,13 +148,19 @@ export class GuildsService {
       .skip(skip)
       .take(take)
       .getManyAndCount();
+    let messagesMap: Map<string, number>;
+    try {
+      messagesMap = await this.sharedAnalytics.getTotalMessagesByGuildIds(guilds.map((g) => g.id));
+    } catch (err) {
+      this.throwAnalyticsUnavailable(err);
+    }
     const data = guilds.map((g) => ({
       id: g.discordGuildId,
       name: g.name,
       icon: g.iconUrl ?? '',
       status: g.status,
       memberCount: g.memberCount,
-      messageCount: Number(g.messageCount ?? 0),
+      messageCount: messagesMap!.get(g.id) ?? 0,
       lastActivity: g.lastActivity?.toISOString() ?? null,
       ownerId: g.ownerId,
       subscriptionTier: g.subscriptionTier,
@@ -237,13 +233,19 @@ export class GuildsService {
       .skip(skip)
       .take(take)
       .getManyAndCount();
+    let messagesMap: Map<string, number>;
+    try {
+      messagesMap = await this.sharedAnalytics.getTotalMessagesByGuildIds(guilds.map((g) => g.id));
+    } catch (err) {
+      this.throwAnalyticsUnavailable(err);
+    }
     const data = guilds.map((g) => ({
       id: g.discordGuildId,
       name: g.name,
       icon: g.iconUrl ?? '',
       status: g.status,
       memberCount: g.memberCount,
-      messageCount: Number(g.messageCount ?? 0),
+      messageCount: messagesMap!.get(g.id) ?? 0,
       lastActivity: g.lastActivity?.toISOString() ?? null,
       ownerId: g.ownerId,
       subscriptionTier: g.subscriptionTier,
@@ -258,34 +260,40 @@ export class GuildsService {
     };
   }
 
-  async getGuildStats(discordGuildId: string): Promise<{
+  async getGuildStats(guildIdOrDiscordId: string): Promise<{
     totalMembers: number;
     totalMessages: number;
     activeMembers: number;
     voiceMinutes: number;
   }> {
-    const guild = await this.findGuildByDiscordId(discordGuildId);
+    const guild = await this.findGuildByIdOrDiscordId(guildIdOrDiscordId);
     if (!guild) {
       throw new NotFoundException({
         code: 'GUILD_NOT_FOUND',
         message: 'Guild not found or access denied',
       });
     }
+    let totalMessages: number;
+    try {
+      totalMessages = await this.sharedAnalytics.getTotalMessagesByGuildId(guild.id);
+    } catch (err) {
+      this.throwAnalyticsUnavailable(err);
+    }
     const voiceMinutes = await this.sharedAnalytics.getTotalVoiceMinutesByGuildId(guild.id);
     return {
       totalMembers: guild.memberCount,
-      totalMessages: Number(guild.messageCount ?? 0),
+      totalMessages: totalMessages!,
       activeMembers: guild.onlineMembers ?? 0,
       voiceMinutes,
     };
   }
 
-  async getBotStatus(discordGuildId: string): Promise<{
+  async getBotStatus(guildIdOrDiscordId: string): Promise<{
     status: 'online' | 'offline' | 'error';
     lastSeen: string | null;
     version: string;
   }> {
-    const guild = await this.findGuildByDiscordId(discordGuildId);
+    const guild = await this.findGuildByIdOrDiscordId(guildIdOrDiscordId);
     if (!guild) {
       throw new NotFoundException({
         code: 'GUILD_NOT_FOUND',
@@ -308,19 +316,26 @@ export class GuildsService {
     return settings.modules;
   }
 
-  async getActivitySparkline(discordGuildId: string): Promise<number[]> {
-    const guild = await this.findGuildByDiscordId(discordGuildId);
+  async getActivitySparkline(
+    guildIdOrDiscordId: string,
+  ): Promise<{ data: number[]; level: ActivityLevel }> {
+    const guild = await this.findGuildByIdOrDiscordId(guildIdOrDiscordId);
     if (!guild) {
       throw new NotFoundException({
         code: 'GUILD_NOT_FOUND',
         message: 'Guild not found or access denied',
       });
     }
-    return Array(24).fill(0);
+    const settings = await this.serverSettingsRepository.findOne({
+      where: { guildId: guild.id },
+    });
+    const data = Array(24).fill(0) as number[];
+    const level = computeActivityLevel(!!settings?.botConnected, data);
+    return { data, level };
   }
 
   async updateSettings(
-    discordGuildId: string,
+    guildIdOrDiscordId: string,
     dto: {
       serverName?: string;
       serverDescription?: string;
@@ -333,7 +348,7 @@ export class GuildsService {
       allowPublicWidgets?: boolean;
     },
   ): Promise<GuildSettingsResponseDto> {
-    const guild = await this.findGuildByDiscordId(discordGuildId);
+    const guild = await this.findGuildByIdOrDiscordId(guildIdOrDiscordId);
     if (!guild) {
       throw new NotFoundException({
         code: 'GUILD_NOT_FOUND',
@@ -364,76 +379,13 @@ export class GuildsService {
       settings.allowPublicWidgets = dto.allowPublicWidgets;
     await this.serverSettingsRepository.save(settings);
     if (dto.botToken !== undefined) {
-      await this.updateToken(discordGuildId, { botToken: dto.botToken });
+      await this.updateToken(guildIdOrDiscordId, { botToken: dto.botToken });
     }
-    return this.getSettings(discordGuildId);
+    return this.getSettings(guildIdOrDiscordId);
   }
 
   async getUserGuilds(userId: string): Promise<UserGuildDto[]> {
-    const accessToken = await this.discordOAuth.getDiscordToken(userId);
-    if (!accessToken) {
-      throw new UnauthorizedException({
-        code: 'DISCORD_TOKEN_EXPIRED',
-        message: 'Re-login required to refresh guild list',
-      });
-    }
-
-    const cacheKey = GUILDS_CACHE_KEY_PREFIX + userId;
-    const cached = await this.redis.get(cacheKey);
-    if (cached) {
-      return JSON.parse(cached) as UserGuildDto[];
-    }
-
-    let discordGuilds: DiscordPartialGuild[];
-    try {
-      const response = await firstValueFrom(
-        this.httpService.get<DiscordPartialGuild[]>(
-          `${DISCORD_API_BASE}/users/@me/guilds`,
-          {
-            headers: { Authorization: `Bearer ${accessToken}` },
-          },
-        ),
-      );
-      discordGuilds = response.data ?? [];
-    } catch {
-      throw new HttpException(
-        {
-          code: 'OAUTH_FAILED',
-          message: 'Discord OAuth authentication failed',
-        },
-        HttpStatus.UNAUTHORIZED,
-      );
-    }
-
-    const filtered = discordGuilds.filter((g) =>
-      hasManageOrAdmin(g.permissions),
-    );
-    if (filtered.length === 0) {
-      const result: UserGuildDto[] = [];
-      await this.redis.set(cacheKey, JSON.stringify(result), GUILDS_CACHE_TTL_SECONDS);
-      return result;
-    }
-
-    const discordIds = filtered.map((g) => g.id);
-    const existingGuilds = await this.guildRepository.find({
-      where: { discordGuildId: In(discordIds) },
-      select: ['discordGuildId'],
-    });
-    const existingSet = new Set(
-      existingGuilds.map((g) => g.discordGuildId),
-    );
-
-    const result: UserGuildDto[] = filtered.map((g) => ({
-      id: g.id,
-      name: g.name,
-      icon: g.icon ?? '',
-      owner: g.owner,
-      permissions: g.permissions,
-      isBotAdded: existingSet.has(g.id),
-    }));
-
-    await this.redis.set(cacheKey, JSON.stringify(result), GUILDS_CACHE_TTL_SECONDS);
-    return result;
+    return this.guildsRealtime.getUserGuilds(userId);
   }
 
   /**
@@ -441,25 +393,36 @@ export class GuildsService {
    * Fallback: владелец гильдии (ownerId) всегда имеет доступ — для smoke-тестов без Discord OAuth.
    */
   async userHasGuildAdmin(userId: string, discordGuildId: string): Promise<boolean> {
-    const guild = await this.findGuildByDiscordId(discordGuildId);
-    if (!guild) return false;
-    if (guild.ownerId === userId) return true;
-    const guilds = await this.getUserGuilds(userId);
-    const g = guilds.find((x) => x.id === discordGuildId);
-    return g ? hasManageOrAdmin(g.permissions) : false;
+    return this.guildsRealtime.userHasGuildAdmin(userId, discordGuildId);
+  }
+
+  /** UUID (guild.id) или Discord Snowflake (discord_guild_id). */
+  private static isUuid(value: string): boolean {
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+  }
+
+  /**
+   * Ищет гильдию по внутреннему UUID (guild.id) или по Discord Snowflake (discord_guild_id).
+   * Позволяет принимать в :guildId как UUID (из ответа onboard), так и snowflake (из списка гильдий).
+   * Вход всегда приводится к string (Snowflake в JS должен быть строкой из-за Number.MAX_SAFE_INTEGER).
+   */
+  async findGuildByIdOrDiscordId(guildIdOrDiscordId: string | number): Promise<Guild | null> {
+    const id = typeof guildIdOrDiscordId === 'string' ? guildIdOrDiscordId : String(guildIdOrDiscordId);
+    const cached = this.guildContext.getGuild(id);
+    if (cached) return cached;
+    return this.guildsRealtime.findGuildByIdOrDiscordId(id);
   }
 
   async findGuildByDiscordId(discordGuildId: string): Promise<Guild | null> {
-    return this.guildRepository.findOne({
-      where: { discordGuildId },
-    });
+    return this.guildsRealtime.findGuildByDiscordId(discordGuildId);
   }
 
   /**
    * Возвращает настройки гильдии и модули. Реальный токен не передаётся; в ответе только hasToken.
+   * guildIdOrDiscordId — внутренний UUID (guild.id) или Discord Snowflake.
    */
-  async getSettings(discordGuildId: string): Promise<GuildSettingsResponseDto> {
-    const guild = await this.findGuildByDiscordId(discordGuildId);
+  async getSettings(guildIdOrDiscordId: string): Promise<GuildSettingsResponseDto> {
+    const guild = await this.findGuildByIdOrDiscordId(guildIdOrDiscordId);
     if (!guild) {
       throw new NotFoundException({
         code: 'GUILD_NOT_FOUND',
@@ -508,10 +471,10 @@ export class GuildsService {
    * Поддерживает формат { moduleId, enabled } (один модуль) и объект с ключами counters/analytics.
    */
   async updateModules(
-    discordGuildId: string,
+    guildIdOrDiscordId: string,
     dto: PatchGuildModulesDto,
   ): Promise<GuildSettingsResponseDto['modules']> {
-    const guild = await this.findGuildByDiscordId(discordGuildId);
+    const guild = await this.findGuildByIdOrDiscordId(guildIdOrDiscordId);
     if (!guild) {
       throw new NotFoundException({
         code: 'GUILD_NOT_FOUND',
@@ -578,10 +541,10 @@ export class GuildsService {
    * Публикует событие в Redis для перезагрузки шардов bot-service.
    */
   async updateToken(
-    discordGuildId: string,
+    guildIdOrDiscordId: string,
     dto: PatchGuildTokenDto,
   ): Promise<{ botToken: string | null }> {
-    const guild = await this.findGuildByDiscordId(discordGuildId);
+    const guild = await this.findGuildByIdOrDiscordId(guildIdOrDiscordId);
     if (!guild) {
       throw new NotFoundException({
         code: 'GUILD_NOT_FOUND',
@@ -607,7 +570,7 @@ export class GuildsService {
       const channel =
         this.sharedConfig.redis.prefix + GUILD_SETTINGS_CHANGED_CHANNEL_SUFFIX;
       const payload = JSON.stringify({
-        discordGuildId,
+        discordGuildId: guild.discordGuildId,
         guildId: guild.id,
       });
       await this.redis.getClient().publish(channel, payload);
@@ -646,47 +609,95 @@ export class GuildsService {
 
     const serverName = name ?? DEFAULT_GUILD_NAME;
 
-    const guild = this.guildRepository.create({
-      discordGuildId,
-      name: serverName,
-      iconUrl: null,
-      banner: null,
-      ownerId: ownerUserId,
-      status: GuildStatus.ACTIVE,
-      subscriptionTier: GuildSubscriptionTier.FREE,
-      memberCount: 0,
-      messageCount: '0',
-      onlineMembers: null,
-      memberGrowth: null,
-      lastActivity: null,
-      shardId: null,
-      isBotInGuild: true,
-    });
-    const savedGuild = await this.guildRepository.save(guild);
+    try {
+      const guild = this.guildRepository.create({
+        discordGuildId,
+        name: serverName,
+        iconUrl: null,
+        banner: null,
+        ownerId: ownerUserId,
+        status: GuildStatus.ACTIVE,
+        subscriptionTier: GuildSubscriptionTier.FREE,
+        memberCount: 0,
+        messageCount: '0',
+        onlineMembers: null,
+        memberGrowth: null,
+        lastActivity: null,
+        shardId: null,
+        isBotInGuild: true,
+      });
+      const savedGuild = await this.guildRepository.save(guild);
 
-    const settings = this.serverSettingsRepository.create({
-      guildId: savedGuild.id,
-      serverName,
-      serverDescription: null,
-      language: DEFAULT_LANGUAGE,
-      timezone: 'UTC',
-      botTokenEncrypted: null,
-      botConnected: false,
-      botUserId: null,
-      lastConnected: null,
-      lastSyncAt: null,
-      dataRetentionDays: 0,
-      anonymizeUserData: true,
-      shareAnalytics: true,
-      allowPublicWidgets: true,
-    });
-    await this.serverSettingsRepository.save(settings);
+      const settings = this.serverSettingsRepository.create({
+        guildId: savedGuild.id,
+        serverName,
+        serverDescription: null,
+        language: DEFAULT_LANGUAGE,
+        timezone: 'UTC',
+        botTokenEncrypted: null,
+        botConnected: false,
+        botUserId: null,
+        lastConnected: null,
+        lastSyncAt: null,
+        dataRetentionDays: 0,
+        anonymizeUserData: false,
+        shareAnalytics: true,
+        allowPublicWidgets: true,
+        updatedAt: new Date(),
+      });
+      await this.serverSettingsRepository.save(settings);
 
-    await this.historySyncQueue
-      .addHistorySync({ guildId: savedGuild.id, discordGuildId })
-      .catch(() => {});
+      await this.historySyncQueue
+        .addHistorySync({ guildId: savedGuild.id, discordGuildId })
+        .catch(() => {});
 
-    return { guildId: savedGuild.id };
+      return { guildId: savedGuild.id };
+    } catch (err) {
+      const driverErr = err instanceof QueryFailedError ? (err as QueryFailedError).driverError as { code?: string; constraint?: string } : undefined;
+      const isDuplicateGuild =
+        driverErr?.code === '23505' &&
+        (driverErr?.constraint?.includes('discord_guild_id') ?? (err as Error).message.includes('discord_guild_id'));
+      if (isDuplicateGuild) {
+        const createdBySetup = await this.guildRepository.findOne({
+          where: { discordGuildId },
+        });
+        if (createdBySetup) {
+          createdBySetup.ownerId = ownerUserId;
+          await this.guildRepository.save(createdBySetup);
+          let serverSettings = await this.serverSettingsRepository.findOne({
+            where: { guildId: createdBySetup.id },
+          });
+          if (!serverSettings) {
+            serverSettings = this.serverSettingsRepository.create({
+              guildId: createdBySetup.id,
+              serverName: createdBySetup.name ?? serverName,
+              serverDescription: null,
+              language: DEFAULT_LANGUAGE,
+              timezone: 'UTC',
+              botTokenEncrypted: null,
+              botConnected: false,
+              botUserId: null,
+              lastConnected: null,
+              lastSyncAt: null,
+              dataRetentionDays: 0,
+              anonymizeUserData: false,
+              shareAnalytics: true,
+              allowPublicWidgets: true,
+              updatedAt: new Date(),
+            });
+            await this.serverSettingsRepository.save(serverSettings);
+          }
+          this.logger.log(
+            `onboardGuild: guild was created by guild:setup (race), updated owner to ${ownerUserId}`,
+          );
+          await this.historySyncQueue
+            .addHistorySync({ guildId: createdBySetup.id, discordGuildId })
+            .catch(() => {});
+          return { guildId: createdBySetup.id };
+        }
+      }
+      throw err;
+    }
   }
 
   /**
@@ -711,8 +722,8 @@ export class GuildsService {
    * Возвращает список текстовых каналов гильдии из Discord API (бот должен быть на сервере, токен настроен).
    * При отсутствии токена или ошибке Discord API возвращает пустой массив.
    */
-  async getChannelsForGuild(discordGuildId: string): Promise<GuildChannelDto[]> {
-    const guild = await this.findGuildByDiscordId(discordGuildId);
+  async getChannelsForGuild(guildIdOrDiscordId: string): Promise<GuildChannelDto[]> {
+    const guild = await this.findGuildByIdOrDiscordId(guildIdOrDiscordId);
     if (!guild) {
       throw new NotFoundException({
         code: 'GUILD_NOT_FOUND',
@@ -724,7 +735,7 @@ export class GuildsService {
     try {
       const response = await firstValueFrom(
         this.httpService.get<Array<{ id: string; name: string; type: number }>>(
-          `${DISCORD_API_BASE}/guilds/${discordGuildId}/channels`,
+          `${DISCORD_API_BASE}/guilds/${guild.discordGuildId}/channels`,
           {
             headers: { Authorization: `Bot ${token}` },
           },
@@ -744,9 +755,9 @@ export class GuildsService {
    * При отсутствии токена или ошибке Discord API возвращает пустой массив.
    */
   async getChannelsWithTypeForGuild(
-    discordGuildId: string,
+    guildIdOrDiscordId: string,
   ): Promise<GuildChannelWithTypeDto[]> {
-    const guild = await this.findGuildByDiscordId(discordGuildId);
+    const guild = await this.findGuildByIdOrDiscordId(guildIdOrDiscordId);
     if (!guild) {
       throw new NotFoundException({
         code: 'GUILD_NOT_FOUND',
@@ -758,7 +769,7 @@ export class GuildsService {
     try {
       const response = await firstValueFrom(
         this.httpService.get<Array<{ id: string; name: string; type: number }>>(
-          `${DISCORD_API_BASE}/guilds/${discordGuildId}/channels`,
+          `${DISCORD_API_BASE}/guilds/${guild.discordGuildId}/channels`,
           {
             headers: { Authorization: `Bot ${token}` },
           },
@@ -781,8 +792,8 @@ export class GuildsService {
    * Возвращает список ролей гильдии из Discord API для маппинга в roleDistribution.
    * При отсутствии токена или ошибке Discord API возвращает пустой массив.
    */
-  async getRolesForGuild(discordGuildId: string): Promise<GuildRoleDto[]> {
-    const guild = await this.findGuildByDiscordId(discordGuildId);
+  async getRolesForGuild(guildIdOrDiscordId: string): Promise<GuildRoleDto[]> {
+    const guild = await this.findGuildByIdOrDiscordId(guildIdOrDiscordId);
     if (!guild) {
       throw new NotFoundException({
         code: 'GUILD_NOT_FOUND',
@@ -794,7 +805,7 @@ export class GuildsService {
     try {
       const response = await firstValueFrom(
         this.httpService.get<Array<{ id: string; name: string; color: number }>>(
-          `${DISCORD_API_BASE}/guilds/${discordGuildId}/roles`,
+          `${DISCORD_API_BASE}/guilds/${guild.discordGuildId}/roles`,
           {
             headers: { Authorization: `Bot ${token}` },
           },

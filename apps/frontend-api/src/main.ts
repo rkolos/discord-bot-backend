@@ -1,16 +1,20 @@
 import { BadRequestException, ValidationPipe } from '@nestjs/common';
 import { HttpAdapterHost, NestFactory } from '@nestjs/core';
+import { IoAdapter } from '@nestjs/platform-socket.io';
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import * as cookieParser from 'cookie-parser';
+import { AllExceptionsFilter, FilteredBootstrapLogger } from '@app/shared';
+import { AppModule } from './app.module';
 
 function parseCorsOrigins(value: string): string[] {
   return value.split(',').map((s) => s.trim()).filter(Boolean);
 }
-import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
-import * as cookieParser from 'cookie-parser';
-import { AllExceptionsFilter } from '@app/shared';
-import { AppModule } from './app.module';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, {
+    logger: new FilteredBootstrapLogger(),
+  });
+  app.useWebSocketAdapter(new IoAdapter(app));
   app.enableShutdownHooks();
   const corsOrigins = parseCorsOrigins(
     process.env.CORS_ORIGIN ?? process.env.FRONTEND_BASE_URL ?? 'http://localhost:3010',
@@ -49,6 +53,10 @@ async function bootstrap() {
   SwaggerModule.setup('docs', app, document);
 
   await app.listen(port);
+
+  const baseUrl = `http://127.0.0.1:${port}`;
+  // Запустить подписчика Redis (RealtimeBootstrapService → subscriber.start())
+  fetch(`${baseUrl}/api/internal/realtime/ping`).catch(() => {});
 }
 
 void bootstrap();

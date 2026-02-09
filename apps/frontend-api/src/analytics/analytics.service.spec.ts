@@ -8,7 +8,7 @@ import { AnalyticsService } from './analytics.service';
 describe('AnalyticsService', () => {
   let service: AnalyticsService;
   let sharedAnalytics: jest.Mocked<Pick<SharedAnalyticsService, 'getOverviewByGuildId' | 'getActivityChartByGuildId' | 'getTopMembersByGuildId'>>;
-  let guildsService: jest.Mocked<Pick<GuildsService, 'findGuildByDiscordId' | 'getSettings'>>;
+  let guildsService: jest.Mocked<Pick<GuildsService, 'findGuildByIdOrDiscordId' | 'getSettings'>>;
 
   const guildId = 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11';
   const discordGuildId = '111222333444555666';
@@ -20,8 +20,8 @@ describe('AnalyticsService', () => {
       getTopMembersByGuildId: jest.fn(),
     };
     const mockGuildsService = {
-      findGuildByDiscordId: jest.fn(),
-      getSettings: jest.fn().mockResolvedValue({ timezone: 'UTC' }),
+      findGuildByIdOrDiscordId: jest.fn(),
+      getSettings: jest.fn().mockResolvedValue({ timezone: 'UTC', anonymizeUserData: false }),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -41,7 +41,7 @@ describe('AnalyticsService', () => {
     it('getActivityChart calls sharedAnalytics with guild id and date range', async () => {
       const from = '2025-01-01';
       const to = '2025-01-31';
-      (guildsService.findGuildByDiscordId as jest.Mock).mockResolvedValue({
+      (guildsService.findGuildByIdOrDiscordId as jest.Mock).mockResolvedValue({
         id: guildId,
         discordGuildId,
         subscriptionTier: GuildSubscriptionTier.PRO,
@@ -60,10 +60,14 @@ describe('AnalyticsService', () => {
       );
     });
 
-    it('getTopMembers calls sharedAnalytics with guild id, sortBy and limit', async () => {
-      (guildsService.findGuildByDiscordId as jest.Mock).mockResolvedValue({
+    it('getTopMembers calls sharedAnalytics with guild id, sortBy, limit and anonymizeUserData from settings', async () => {
+      (guildsService.findGuildByIdOrDiscordId as jest.Mock).mockResolvedValue({
         id: guildId,
         discordGuildId,
+      });
+      (guildsService.getSettings as jest.Mock).mockResolvedValue({
+        timezone: 'UTC',
+        anonymizeUserData: false,
       });
       (sharedAnalytics.getTopMembersByGuildId as jest.Mock).mockResolvedValue([]);
 
@@ -73,16 +77,18 @@ describe('AnalyticsService', () => {
         guildId,
         'messages',
         20,
+        { anonymizeUserData: false },
       );
     });
 
     it('getOverview calls sharedAnalytics with guild id and timezone from settings', async () => {
-      (guildsService.findGuildByDiscordId as jest.Mock).mockResolvedValue({
+      (guildsService.findGuildByIdOrDiscordId as jest.Mock).mockResolvedValue({
         id: guildId,
         discordGuildId,
       });
       (guildsService.getSettings as jest.Mock).mockResolvedValue({
         timezone: 'UTC',
+        anonymizeUserData: false,
       });
       (sharedAnalytics.getOverviewByGuildId as jest.Mock).mockResolvedValue({
         totalMessages: 100,
@@ -104,7 +110,7 @@ describe('AnalyticsService', () => {
     });
 
     it('getOverview uses header timezone over query and settings', async () => {
-      (guildsService.findGuildByDiscordId as jest.Mock).mockResolvedValue({
+      (guildsService.findGuildByIdOrDiscordId as jest.Mock).mockResolvedValue({
         id: guildId,
         discordGuildId,
       });
@@ -129,7 +135,7 @@ describe('AnalyticsService', () => {
 
   describe('Free plan period validation', () => {
     it('throws when Free plan and range exceeds 365 days', async () => {
-      (guildsService.findGuildByDiscordId as jest.Mock).mockResolvedValue({
+      (guildsService.findGuildByIdOrDiscordId as jest.Mock).mockResolvedValue({
         id: guildId,
         discordGuildId,
         subscriptionTier: GuildSubscriptionTier.FREE,
@@ -151,7 +157,7 @@ describe('AnalyticsService', () => {
     });
 
     it('allows Free plan when range is 365 days or less', async () => {
-      (guildsService.findGuildByDiscordId as jest.Mock).mockResolvedValue({
+      (guildsService.findGuildByIdOrDiscordId as jest.Mock).mockResolvedValue({
         id: guildId,
         discordGuildId,
         subscriptionTier: GuildSubscriptionTier.FREE,
@@ -172,7 +178,7 @@ describe('AnalyticsService', () => {
 
   describe('getOverview', () => {
     it('throws GUILD_NOT_FOUND when guild does not exist', async () => {
-      (guildsService.findGuildByDiscordId as jest.Mock).mockResolvedValue(null);
+      (guildsService.findGuildByIdOrDiscordId as jest.Mock).mockResolvedValue(null);
 
       await expect(service.getOverview(discordGuildId)).rejects.toThrow(NotFoundException);
       await expect(service.getOverview(discordGuildId)).rejects.toMatchObject({
@@ -184,7 +190,7 @@ describe('AnalyticsService', () => {
 
   describe('validateDateRange', () => {
     it('throws when from > to', async () => {
-      (guildsService.findGuildByDiscordId as jest.Mock).mockResolvedValue({
+      (guildsService.findGuildByIdOrDiscordId as jest.Mock).mockResolvedValue({
         id: guildId,
         discordGuildId,
         subscriptionTier: GuildSubscriptionTier.PRO,

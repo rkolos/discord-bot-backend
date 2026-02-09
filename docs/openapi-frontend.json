@@ -821,7 +821,14 @@
         "parameters": [],
         "responses": {
           "200": {
-            "description": ""
+            "description": "Activity sparkline data and level (live / active / quiet).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActivitySparklineResponse"
+                }
+              }
+            }
           }
         },
         "tags": [
@@ -1142,6 +1149,116 @@
           {
             "bearer": []
           }
+        ]
+      }
+    },
+    "/api/guilds/{guildId}/welcome": {
+      "get": {
+        "operationId": "WelcomeGoodbyeController_getWelcome",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Welcome message settings.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WelcomeGoodbyeSettingResponse"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Welcome / Goodbye"
+        ],
+        "security": [
+          { "bearer": [] }
+        ]
+      },
+      "patch": {
+        "operationId": "WelcomeGoodbyeController_patchWelcome",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatchWelcomeGoodbyeDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated welcome settings.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WelcomeGoodbyeSettingResponse"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Welcome / Goodbye"
+        ],
+        "security": [
+          { "bearer": [] }
+        ]
+      }
+    },
+    "/api/guilds/{guildId}/goodbye": {
+      "get": {
+        "operationId": "WelcomeGoodbyeController_getGoodbye",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Goodbye message settings.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WelcomeGoodbyeSettingResponse"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Welcome / Goodbye"
+        ],
+        "security": [
+          { "bearer": [] }
+        ]
+      },
+      "patch": {
+        "operationId": "WelcomeGoodbyeController_patchGoodbye",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatchWelcomeGoodbyeDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated goodbye settings.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WelcomeGoodbyeSettingResponse"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Welcome / Goodbye"
+        ],
+        "security": [
+          { "bearer": [] }
         ]
       }
     },
@@ -1622,7 +1739,16 @@
       },
       "CreateCounterDto": {
         "type": "object",
-        "properties": {}
+        "properties": {
+          "channelId": { "type": "string" },
+          "type": { "type": "string", "enum": ["stat", "goal", "clock"] },
+          "metric": { "type": "string", "enum": ["members", "messages", "voice", "online", "idle", "dnd", "offline", "role"] },
+          "roleId": { "type": "string", "description": "Required when metric is role (Discord role ID, Snowflake)" },
+          "template": { "type": "string" },
+          "target": { "type": "number" },
+          "timezone": { "type": "string" },
+          "dateFormat": { "type": "string" }
+        }
       },
       "PreviewCounterDto": {
         "type": "object",
@@ -1630,11 +1756,77 @@
       },
       "PatchCounterDto": {
         "type": "object",
-        "properties": {}
+        "properties": {
+          "channelId": { "type": "string" },
+          "type": { "type": "string", "enum": ["stat", "goal", "clock"] },
+          "metric": { "type": "string", "enum": ["members", "messages", "voice", "online", "idle", "dnd", "offline", "role"] },
+          "roleId": { "type": "string", "nullable": true },
+          "template": { "type": "string" },
+          "status": { "type": "string", "enum": ["active", "inactive", "error"] },
+          "target": { "type": "number" },
+          "timezone": { "type": "string" },
+          "dateFormat": { "type": "string" }
+        }
       },
       "PatchLogSettingsDto": {
         "type": "object",
         "properties": {}
+      },
+      "WelcomeGoodbyeSettingResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "object",
+            "properties": {
+              "channelId": { "type": "string", "nullable": true },
+              "enabled": { "type": "boolean" },
+              "messageType": { "type": "string", "enum": ["text", "embed", "text_and_embed"] },
+              "contentText": { "type": "string", "nullable": true },
+              "contentEmbed": {
+                "type": "object",
+                "nullable": true,
+                "properties": {
+                  "title": { "type": "string" },
+                  "description": { "type": "string" },
+                  "color": { "type": "integer" },
+                  "fields": {
+                    "type": "array",
+                    "items": { "$ref": "#/components/schemas/ContentEmbedFieldDto" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "PatchWelcomeGoodbyeDto": {
+        "type": "object",
+        "properties": {
+          "channelId": { "type": "string", "nullable": true },
+          "enabled": { "type": "boolean" },
+          "messageType": { "type": "string", "enum": ["text", "embed", "text_and_embed"] },
+          "contentText": { "type": "string", "nullable": true },
+          "contentEmbed": { "$ref": "#/components/schemas/ContentEmbedDto" }
+        }
+      },
+      "ContentEmbedFieldDto": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string" },
+          "value": { "type": "string" }
+        }
+      },
+      "ContentEmbedDto": {
+        "type": "object",
+        "properties": {
+          "title": { "type": "string" },
+          "description": { "type": "string" },
+          "color": { "type": "integer" },
+          "fields": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/ContentEmbedFieldDto" }
+          }
+        }
       },
       "GuildStatsResponse": {
         "type": "object",
@@ -1792,6 +1984,22 @@
             }
           }
         }
+      },
+      "ActivitySparklineResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": { "type": "number" },
+            "description": "Message counts per hour for last 24 hours (most recent first)."
+          },
+          "level": {
+            "type": "string",
+            "enum": ["live", "active", "quiet"],
+            "description": "Activity level: live = bot connected; active = last 24h ≥ 1 message; quiet = last 24h < 1 or no data."
+          }
+        },
+        "required": ["data", "level"]
       }
     }
   }

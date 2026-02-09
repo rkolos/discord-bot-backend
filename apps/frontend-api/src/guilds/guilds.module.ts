@@ -5,9 +5,11 @@ import { CryptoModule, SharedAnalyticsModule } from '@app/shared';
 import { Guild, GuildModule, ServerSettings, CompanyMember } from '@app/shared';
 import { AuthModule } from '../auth/auth.module';
 import { GuildsController } from './guilds.controller';
+import { GuildsRealtimeService } from './guilds-realtime.service';
 import { GuildsService } from './guilds.service';
 import { HistorySyncQueueService } from './history-sync-queue.service';
 import { GuildAdminGuard } from './guards/guild-admin.guard';
+import { GuildContextService } from './guild-context.service';
 
 @Module({
   imports: [
@@ -21,7 +23,13 @@ import { GuildAdminGuard } from './guards/guild-admin.guard';
     forwardRef(() => AuthModule),
   ],
   controllers: [GuildsController],
-  providers: [GuildsService, GuildAdminGuard, HistorySyncQueueService],
-  exports: [GuildsService, GuildAdminGuard],
+  providers: [
+    GuildsService,
+    GuildsRealtimeService,
+    GuildAdminGuard,
+    GuildContextService,
+    HistorySyncQueueService,
+  ],
+  exports: [GuildsService, GuildsRealtimeService, GuildAdminGuard, GuildContextService],
 })
 export class GuildsModule {}

@@ -68,13 +68,17 @@ export class IngestorQueueConsumer implements OnModuleInit, OnModuleDestroy {
   }
 
   private async processJob(job: { id?: string; data: IngestorJobPayload }): Promise<void> {
+    const d = job.data;
+    this.logger.log(
+      `[analytics] job received eventType=${d.eventType} guildId=${d.guildId} eventId=${d.eventId ?? 'n/a'}`,
+    );
     const dto = plainToInstance(RawEventDto, job.data, {
       enableImplicitConversion: true,
     });
     const errors = await validate(dto);
     if (errors.length > 0) {
       const msg = errors.map((e) => Object.values(e.constraints ?? {}).join('; ')).join(' ');
-      this.logger.warn(`Validation failed for job ${job.id}: ${msg}`);
+      this.logger.warn(`[analytics] validation failed jobId=${job.id} ${msg}`);
       throw new Error(`Validation failed: ${msg}`);
     }
 
@@ -90,7 +94,7 @@ export class IngestorQueueConsumer implements OnModuleInit, OnModuleDestroy {
     );
     if (!payloadValidation.valid) {
       this.logger.warn(
-        `Payload validation failed for job ${job.id}, eventType=${dto.eventType}: ${payloadValidation.reason ?? 'unknown'}`,
+        `[analytics] payload validation failed jobId=${job.id} eventType=${dto.eventType} reason=${payloadValidation.reason ?? 'unknown'}`,
       );
       return;
     }
@@ -123,6 +127,7 @@ export class IngestorQueueConsumer implements OnModuleInit, OnModuleDestroy {
           voiceMinutes: leave?.voiceMinutes ?? 0,
         };
         const raw = toRawEventForVoice(dto, payload, enrichment);
+        this.logger.log(`[analytics] pushEvent voice_leave guildId=${dto.guildId} eventId=${dto.eventId}`);
         this.clickhouseIngestor.pushEvent(raw);
         return;
       }
@@ -132,12 +137,14 @@ export class IngestorQueueConsumer implements OnModuleInit, OnModuleDestroy {
           (dto.payload as Record<string, unknown>) ?? {},
           enrichment,
         );
+        this.logger.log(`[analytics] pushEvent voice guildId=${dto.guildId} eventId=${dto.eventId}`);
         this.clickhouseIngestor.pushEvent(raw);
         return;
       }
     }
 
     const raw = toRawEvent(dto, (dto.payload as Record<string, unknown>) ?? {}, enrichment);
+    this.logger.log(`[analytics] pushEvent eventType=${dto.eventType} guildId=${dto.guildId} eventId=${dto.eventId}`);
     this.clickhouseIngestor.pushEvent(raw);
   }
 }

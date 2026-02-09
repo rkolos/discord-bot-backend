@@ -6,7 +6,7 @@ import 'reflect-metadata';
 import { Client, GatewayIntentBits } from 'discord.js';
 import Redis from 'ioredis';
 import { Queue } from 'bullmq';
-import { AppDataSource, Guild, GUILD_SETUP_QUEUE_NAME } from '@app/shared';
+import { AppDataSource, Guild, GUILD_SETUP_QUEUE_NAME, publishGuildStateEvent, publishDiscordEvent } from '@app/shared';
 import type { GuildSetupJobPayload } from '@app/shared';
 import {
   syncOnGuildCreate,
@@ -62,7 +62,9 @@ async function run(): Promise<void> {
       GatewayIntentBits.Guilds,
       GatewayIntentBits.GuildMembers,
       GatewayIntentBits.GuildMessages,
+      GatewayIntentBits.MessageContent, // привилегированный: content в MESSAGE_CREATE, MESSAGE_UPDATE, MESSAGE_DELETE
       GatewayIntentBits.GuildVoiceStates,
+      GatewayIntentBits.GuildPresences,
     ],
     shards: [SHARD_ID],
     shardCount: SHARD_COUNT,
@@ -139,6 +141,47 @@ async function run(): Promise<void> {
     setInterval(() => void writeHeartbeat(), HEARTBEAT_INTERVAL_MS);
   });
 
+  function toEventData(obj: unknown): Record<string, unknown> {
+    if (obj == null) return {};
+    const o = obj as { toJSON?: () => unknown };
+    if (typeof o.toJSON === 'function') {
+      try {
+        const out = o.toJSON();
+        if (out != null && typeof out === 'object' && !Array.isArray(out)) return out as Record<string, unknown>;
+      } catch {
+        // ignore
+      }
+    }
+    return {};
+  }
+
+  function enrichGuildData(
+    base: Record<string, unknown>,
+    g: { id: string; name?: string; icon?: string | null; ownerId?: string; memberCount?: number },
+  ): Record<string, unknown> {
+    return {
+      ...base,
+      id: base.id ?? g.id,
+      name: base.name ?? g.name,
+      icon: base.icon ?? g.icon,
+      owner_id: base.owner_id ?? g.ownerId,
+      member_count: base.member_count ?? g.memberCount,
+    };
+  }
+
+  function enrichThreadData(
+    base: Record<string, unknown>,
+    t: { id: string; name?: string; parentId?: string | null; guildId?: string | null; guild?: { id: string } },
+  ): Record<string, unknown> {
+    return {
+      ...base,
+      id: base.id ?? t.id,
+      name: base.name ?? t.name,
+      parent_id: base.parent_id ?? t.parentId,
+      guild_id: base.guild_id ?? t.guildId ?? t.guild?.id,
+    };
+  }
+
   client.on('guildCreate', async (guild) => {
     console.log(`[shard-worker] GUILD_CREATE received from Discord: discordGuildId=${guild.id} name=${guild.name}`);
     try {
@@ -150,6 +193,35 @@ async function run(): Promise<void> {
       });
       if (result) {
         if ('syncedGuildId' in result) {
+          console.log(`[realtime] Discord → Redis guildId=${result.syncedGuildId} parameter=isBotInGuild (guildCreate)`);
+          publishGuildStateEvent(redis, prefix, {
+            guildId: result.syncedGuildId,
+            discordGuildId: guild.id,
+            parameter: 'isBotInGuild',
+            direction: 'set',
+            value: true,
+          });
+          console.log(`[realtime] Discord → Redis guildId=${result.syncedGuildId} parameter=botConnected (guildCreate)`);
+          publishGuildStateEvent(redis, prefix, {
+            guildId: result.syncedGuildId,
+            discordGuildId: guild.id,
+            parameter: 'botConnected',
+            direction: 'set',
+            value: true,
+          });
+          publishGuildStateEvent(redis, prefix, {
+            guildId: result.syncedGuildId,
+            discordGuildId: guild.id,
+            parameter: 'bot_status',
+            direction: 'set',
+            value: 'installed',
+          });
+          publishDiscordEvent(redis, prefix, {
+            guildId: result.syncedGuildId,
+            discordGuildId: guild.id,
+            eventType: 'GUILD_CREATE',
+            data: enrichGuildData(toEventData(guild), guild),
+          });
           const url = `${internalBaseUrl()}/internal/guilds/${result.syncedGuildId}/sync`;
           const secret = process.env['INTERNAL_API_SECRET'];
           await fetch(url, {
@@ -174,11 +246,84 @@ async function run(): Promise<void> {
 
   client.on('guildDelete', async (guild) => {
     try {
+      const existingGuild = await AppDataSource.getRepository(Guild).findOne({
+        where: { discordGuildId: guild.id },
+        select: ['id', 'discordGuildId'],
+      });
       await syncOnGuildDelete(AppDataSource.manager, {
         discordGuildId: guild.id,
       });
+      if (existingGuild?.id) {
+        console.log(`[realtime] Discord → Redis guildId=${existingGuild.id} parameter=bot_status,botConnected,isBotInGuild (guildDelete)`);
+        publishGuildStateEvent(redis, prefix, {
+          guildId: existingGuild.id,
+          discordGuildId: guild.id,
+          parameter: 'bot_status',
+          direction: 'set',
+          value: 'not_installed',
+        });
+        publishGuildStateEvent(redis, prefix, {
+          guildId: existingGuild.id,
+          discordGuildId: guild.id,
+          parameter: 'isBotInGuild',
+          direction: 'set',
+          value: false,
+        });
+        publishGuildStateEvent(redis, prefix, {
+          guildId: existingGuild.id,
+          discordGuildId: guild.id,
+          parameter: 'botConnected',
+          direction: 'set',
+          value: false,
+        });
+        publishDiscordEvent(redis, prefix, {
+          guildId: existingGuild.id,
+          discordGuildId: guild.id,
+          eventType: 'GUILD_DELETE',
+          data: enrichGuildData(toEventData(guild), guild),
+        });
+      }
     } catch (err) {
       console.error(`[shard-worker] guildDelete sync error: ${(err as Error).message}`);
+    }
+  });
+
+  client.on('guildUpdate', async (_oldGuild, newGuild) => {
+    try {
+      const guildId = await getGuildId(newGuild.id);
+      if (!guildId) return;
+      const repo = AppDataSource.getRepository(Guild);
+      const guild = await repo.findOne({
+        where: { id: guildId },
+        select: ['id', 'discordGuildId', 'name', 'iconUrl', 'banner'],
+      });
+      if (!guild) return;
+      const iconUrl =
+        newGuild.icon != null
+          ? `https://cdn.discordapp.com/icons/${newGuild.id}/${newGuild.icon}.png`
+          : null;
+      const bannerUrl =
+        newGuild.banner != null
+          ? `https://cdn.discordapp.com/banners/${newGuild.id}/${newGuild.banner}.png`
+          : null;
+      guild.name = newGuild.name ?? guild.name;
+      guild.iconUrl = iconUrl ?? guild.iconUrl;
+      guild.banner = bannerUrl ?? guild.banner;
+      await repo.save(guild);
+      console.log(`[realtime] Discord → Redis guildId=${guildId} parameter=guildInfo (guildUpdate)`);
+      publishGuildStateEvent(redis, prefix, {
+        guildId: guild.id,
+        discordGuildId: guild.discordGuildId,
+        parameter: 'guildInfo',
+        direction: 'set',
+        value: {
+          name: guild.name,
+          iconUrl: guild.iconUrl ?? null,
+          banner: guild.banner ?? null,
+        },
+      });
+    } catch (err) {
+      console.error(`[shard-worker] guildUpdate error: ${(err as Error).message}`);
     }
   });
 
@@ -203,6 +348,18 @@ async function run(): Promise<void> {
       await eventHandlers.onMessageDelete(message as Parameters<typeof eventHandlers.onMessageDelete>[0]);
     } catch (err) {
       console.error(`[shard-worker] messageDelete error: ${(err as Error).message}`);
+    }
+  });
+
+  client.on('messageCreate', async (message) => {
+    const discordGuildId = (message.channel as { guild?: { id: string } })?.guild?.id;
+    if (discordGuildId) {
+      console.log(`[analytics] messageCreate discordGuildId=${discordGuildId}`);
+    }
+    try {
+      await eventHandlers.onMessageCreate(message as Parameters<typeof eventHandlers.onMessageCreate>[0]);
+    } catch (err) {
+      console.error(`[shard-worker] messageCreate error: ${(err as Error).message}`);
     }
   });
 
@@ -236,6 +393,65 @@ async function run(): Promise<void> {
       );
     } catch (err) {
       console.error(`[shard-worker] guildMemberUpdate error: ${(err as Error).message}`);
+    }
+  });
+
+  client.on('presenceUpdate', async (oldPresence, newPresence) => {
+    try {
+      await eventHandlers.onPresenceUpdate(
+        oldPresence as Parameters<typeof eventHandlers.onPresenceUpdate>[0],
+        newPresence as Parameters<typeof eventHandlers.onPresenceUpdate>[1],
+      );
+    } catch (err) {
+      console.error(`[shard-worker] presenceUpdate error: ${(err as Error).message}`);
+    }
+  });
+
+  client.on('threadCreate', async (thread) => {
+    try {
+      const discordGuildId = thread.guildId ?? (thread.guild as { id: string } | null)?.id;
+      if (!discordGuildId) return;
+      const guildId = await getGuildId(discordGuildId);
+      if (!guildId) return;
+      console.log(`[realtime] Discord → Redis guildId=${guildId} parameter=threadCreated`);
+      publishGuildStateEvent(redis, prefix, {
+        guildId,
+        discordGuildId,
+        parameter: 'threadCreated',
+        direction: 'set',
+        value: {
+          threadId: thread.id,
+          channelId: thread.parentId ?? null,
+          name: thread.name ?? null,
+        },
+      });
+      publishDiscordEvent(redis, prefix, {
+        guildId,
+        discordGuildId,
+        eventType: 'THREAD_CREATE',
+        data: enrichThreadData(toEventData(thread), thread),
+      });
+    } catch (err) {
+      console.error(`[shard-worker] threadCreate error: ${(err as Error).message}`);
+    }
+  });
+
+  client.on('threadDelete', async (thread) => {
+    try {
+      const discordGuildId = thread.guildId ?? (thread.guild as { id: string } | null)?.id;
+      if (!discordGuildId) return;
+      const guildId = await getGuildId(discordGuildId);
+      if (!guildId) return;
+      console.log(`[realtime] Discord → Redis guildId=${guildId} parameter=threadCreated (dec)`);
+      publishGuildStateEvent(redis, prefix, {
+        guildId,
+        discordGuildId,
+        parameter: 'threadCreated',
+        direction: 'dec',
+        delta: 1,
+      });
+    } catch (err) {
+      console.error(`[shard-worker] threadDelete error: ${(err as Error).message}`);
     }
   });
 

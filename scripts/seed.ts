@@ -296,7 +296,7 @@ async function seedPostgres(ds: typeof AppDataSource, encryptionKey: string): Pr
         lastConnected: hasBot ? now : null,
         lastSyncAt: null,
         dataRetentionDays: isPremium ? 365 : 30,
-        anonymizeUserData: true,
+        anonymizeUserData: false,
         shareAnalytics: true,
         allowPublicWidgets: true,
         updatedAt: now,

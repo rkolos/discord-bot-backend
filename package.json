@@ -34,6 +34,8 @@
     "openapi:frontend": "ts-node -r tsconfig-paths/register scripts/generate-openapi-frontend.ts",
     "openapi:admin": "ts-node -r tsconfig-paths/register scripts/generate-openapi-admin.ts",
     "openapi:export": "npm run openapi:frontend && npm run openapi:admin",
+    "auth-and-socket": "ts-node scripts/auth-and-socket.ts",
+    "emit-guild-state-events": "ts-node -r tsconfig-paths/register scripts/emit-guild-state-events.ts",
     "build:api-with-docs": "nest build frontend-api && nest build admin-api && npm run openapi:export"
   },
   "dependencies": {
@@ -45,7 +47,9 @@
     "@nestjs/jwt": "^11.0.2",
     "@nestjs/passport": "^10.0.0",
     "@nestjs/platform-express": "^10.0.0",
+    "@nestjs/platform-socket.io": "^10.0.0",
     "@nestjs/schedule": "^4.0.0",
+    "@nestjs/websockets": "^10.0.0",
     "@nestjs/swagger": "^7.4.0",
     "@nestjs/terminus": "^11.0.0",
     "@nestjs/throttler": "^6.0.0",
@@ -86,6 +90,7 @@
     "dotenv": "^16.4.5",
     "eslint": "^9.39.2",
     "jest": "^30.2.0",
+    "socket.io-client": "^4.7.0",
     "supertest": "^7.2.2",
     "ts-jest": "^29.4.6",
     "ts-node": "^10.9.2",
