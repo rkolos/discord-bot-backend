@@ -41,6 +41,7 @@ Complete list of error codes used throughout the API.
 
 ## Resource Not Found Errors
 
+- `INVITE_NOT_FOUND` - Invite not found or already used
 - `USER_NOT_FOUND` - User not found
 - `GUILD_NOT_FOUND` - Guild not found or access denied
 - `TEAM_MEMBER_NOT_FOUND` - Team member not found
@@ -53,6 +54,9 @@ Complete list of error codes used throughout the API.
 
 ## Business Logic Errors
 
+- `INVITE_EXPIRED` - Invite has expired
+- `INVITE_ALREADY_USED` - Invite was already used
+- `ALREADY_TEAM_MEMBER` - User is already a member of the team
 - `SUBSCRIPTION_UPGRADE_FAILED` - Failed to upgrade subscription
 - `RATE_LIMIT_EXCEEDED` - Rate limit exceeded
 - `USER_DELETE_FAILED` - Failed to delete user data (Right to be Forgotten)

@@ -12,6 +12,7 @@ import {
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { GuildsModule } from '../guilds/guilds.module';
+import { TeamModule } from '../team/team.module';
 import { DiscordOAuthService } from './discord-oauth.service';
 import { PasswordService } from './password.service';
 import { JwtStrategy } from './jwt.strategy';
@@ -33,6 +34,7 @@ import { JwtStrategy } from './jwt.strategy';
       maxRedirects: 0,
     }),
     forwardRef(() => GuildsModule),
+    TeamModule,
   ],
   controllers: [AuthController],
   providers: [AuthService, DiscordOAuthService, PasswordService, JwtStrategy],

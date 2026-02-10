@@ -1,9 +1,10 @@
-import { IsEmail, IsEnum } from 'class-validator';
+import { IsEnum, IsOptional, IsString } from 'class-validator';
 import { CompanyMemberRole } from '@app/shared';
 
 export class InviteTeamDto {
-  @IsEmail()
-  email: string;
+  @IsOptional()
+  @IsString()
+  name?: string;
 
   @IsEnum(CompanyMemberRole)
   role: CompanyMemberRole;

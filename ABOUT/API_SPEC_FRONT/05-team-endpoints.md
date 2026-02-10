@@ -1,10 +1,11 @@
 # Team Endpoints
 
-All team endpoints require authentication.
+Team endpoints require authentication except GET /api/invites/:token (public).
 
 ## Table of Contents
 
 1. [Team Members](#71-team-members)
+2. [Invites (Public)](#72-invites-public)
 
 ---
 
@@ -50,7 +51,7 @@ All team endpoints require authentication.
 
 **Endpoint:** `POST /api/me/team/invite`
 
-**Description:** Invite a new team member to the workspace.
+**Description:** Create an invite link. Share the returned inviteUrl with the person to invite. No email required.
 
 **Headers:**
 - `Authorization: Bearer <token>` (required)
@@ -58,7 +59,7 @@ All team endpoints require authentication.
 **Request Body:**
 ```json
 {
-  "email": "string",
+  "name": "string (optional)",
   "role": "Owner" | "Admin" | "Member"
 }
 ```
@@ -68,21 +69,14 @@ All team endpoints require authentication.
 {
   "data": {
     "success": true,
-    "inviteToken": "string"
+    "inviteToken": "string",
+    "inviteUrl": "string"
   }
 }
 ```
 
 **Error Responses:**
 - `422 Unprocessable Entity` - Validation errors
-  ```json
-  {
-    "error": {
-      "code": "VALIDATION_ERROR",
-      "message": "Invalid email format"
-    }
-  }
-  ```
 - `403 Forbidden` - Insufficient permissions
   ```json
   {
@@ -93,7 +87,38 @@ All team endpoints require authentication.
   }
   ```
 
-### 7.1.3 Update Team Member Role
+### 7.1.3 Accept Team Invite
+
+**Endpoint:** `POST /api/me/team/accept`
+
+**Description:** Accept an invite for the current user. Requires Bearer JWT.
+
+**Headers:**
+- `Authorization: Bearer <token>` (required)
+
+**Request Body:**
+```json
+{
+  "inviteToken": "string"
+}
+```
+
+**Response:** `200 OK`
+```json
+{
+  "data": {
+    "companyId": "string",
+    "companyName": "string"
+  }
+}
+```
+
+**Error Responses:**
+- `404 Not Found` - INVITE_NOT_FOUND (invite not found or already used)
+- `410 Gone` - INVITE_EXPIRED
+- `409 Conflict` - ALREADY_TEAM_MEMBER (user already in the team)
+
+### 7.1.4 Update Team Member Role
 
 **Endpoint:** `PATCH /api/me/team/:memberId`
 
@@ -146,7 +171,7 @@ All team endpoints require authentication.
   }
   ```
 
-### 7.1.4 Remove Team Member
+### 7.1.5 Remove Team Member
 
 **Endpoint:** `DELETE /api/me/team/:memberId`
 
@@ -186,6 +211,34 @@ All team endpoints require authentication.
     }
   }
   ```
+
+---
+
+## 7.2 Invites (Public)
+
+### 7.2.1 Get Invite Preview
+
+**Endpoint:** `GET /api/invites/:token`
+
+**Description:** Get invite details for displaying accept UI. Public, no auth required.
+
+**Path Parameters:**
+- `token` (string, required) - Invite token from the invite URL
+
+**Response:** `200 OK`
+```json
+{
+  "data": {
+    "companyName": "string",
+    "inviterName": "string",
+    "role": "Owner" | "Admin" | "Member"
+  }
+}
+```
+
+**Error Responses:**
+- `404 Not Found` - INVITE_NOT_FOUND
+- `410 Gone` - INVITE_EXPIRED
 
 ---
 

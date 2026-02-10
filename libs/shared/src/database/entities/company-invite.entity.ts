@@ -22,8 +22,11 @@ export class CompanyInvite {
   @JoinColumn({ name: 'company_id' })
   company: Company;
 
-  @Column({ name: 'email', type: 'text' })
-  email: string;
+  @Column({ name: 'email', type: 'text', nullable: true })
+  email: string | null;
+
+  @Column({ name: 'invitee_display_name', type: 'text', nullable: true })
+  inviteeDisplayName: string | null;
 
   @Column({
     name: 'role',

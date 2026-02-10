@@ -20,6 +20,7 @@ import {
 } from '@app/shared';
 import { SharedConfigService } from '@app/shared';
 import { PasswordService } from './password.service';
+import { TeamService } from '../team/team.service';
 
 const JWT_ACCESS_TTL_SECONDS = 900; // 15 min
 const REFRESH_TOKEN_TTL_DAYS = 7;
@@ -40,6 +41,7 @@ export class AuthService {
     private readonly sharedConfig: SharedConfigService,
     private readonly passwordService: PasswordService,
     private readonly discordOAuth: DiscordOAuthService,
+    private readonly teamService: TeamService,
   ) {}
 
   async register(
@@ -70,6 +72,7 @@ export class AuthService {
       status: UserStatus.ACTIVE,
     });
     await this.userRepository.save(user);
+    await this.teamService.ensureDefaultWorkspace(user.id, fullName.trim());
     const session = await this.createSession(user);
     return { user, ...session };
   }
@@ -104,6 +107,7 @@ export class AuthService {
     const now = new Date();
     user.lastLoginAt = now;
     await this.userRepository.save(user);
+    await this.teamService.ensureDefaultWorkspace(user.id, user.username);
     const session = await this.createSession(user);
     return { user, ...session };
   }
@@ -154,6 +158,7 @@ export class AuthService {
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
+    await this.teamService.ensureDefaultWorkspace(user.id, discordUser.username);
     return user;
   }
 

@@ -509,6 +509,7 @@ flowchart LR
 |----------|-----|----------------|----------------|----------|
 | data.success | true | Константа | — | Успех. |
 | data.inviteToken | string | Вычисляемое (randomBytes), запись в PostgreSQL `company_invites` | — | Токен приглашения. |
+| data.inviteUrl | string | FRONTEND_BASE_URL + /invite/ + inviteToken | — | Ссылка для приглашения. |
 
 ### PATCH /api/me/team/:memberId (ответ)
 

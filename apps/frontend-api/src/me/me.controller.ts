@@ -25,6 +25,7 @@ import { PatchMeDto } from './dto/patch-me.dto';
 import { MeGuildsQueryDto } from './dto/me-guilds-query.dto';
 import { TeamQueryDto } from '../team/dto/team-query.dto';
 import { InviteTeamDto } from '../team/dto/invite-team.dto';
+import { AcceptInviteDto } from '../team/dto/accept-invite.dto';
 import { PatchTeamMemberDto } from '../team/dto/patch-team-member.dto';
 import { MemberIdParamDto } from '../team/dto/member-id-param.dto';
 import { BillingService } from '../billing/billing.service';
@@ -131,17 +132,32 @@ export class MeController {
   @ApiOperation({
     summary: 'Invite team member',
     description:
-      'Sends an invite (by email) to join the user\'s team. Body: email, role. Returns created invite. Requires Bearer JWT.',
+      'Creates an invite link. Body: role, optional name. Returns inviteUrl. Requires Bearer JWT.',
   })
   async inviteTeamMember(
     @CurrentUser() user: User,
     @Body() dto: InviteTeamDto,
-  ): Promise<{ data: { success: true; inviteToken: string } }> {
+  ): Promise<{ data: { success: true; inviteToken: string; inviteUrl: string } }> {
     const data = await this.teamService.inviteTeamMember(
       user.id,
-      dto.email,
       dto.role,
+      dto.name,
     );
+    return { data };
+  }
+
+  @Post('team/accept')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Accept team invite',
+    description:
+      'Accepts an invite for the current user. Body: inviteToken. Requires Bearer JWT.',
+  })
+  async acceptTeamInvite(
+    @CurrentUser() user: User,
+    @Body() dto: AcceptInviteDto,
+  ): Promise<{ data: { companyId: string; companyName: string } }> {
+    const data = await this.teamService.acceptInvite(user.id, dto.inviteToken);
     return { data };
   }
 

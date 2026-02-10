@@ -85,7 +85,10 @@ export class UserDataService {
         refreshTokenRepo.find({ where: { userId: user.id }, select: ['id', 'expiresAt', 'createdAt', 'revokedAt'] }),
         companyRepo.find({ where: { ownerId: user.id }, select: ['id', 'name', 'createdAt'] }),
         companyMemberRepo.find({ where: { userId: user.id }, relations: ['company'], select: { company: { id: true, name: true } } }),
-        companyInviteRepo.find({ where: { invitedBy: user.id }, select: ['id', 'email', 'role', 'expiresAt', 'createdAt'] }),
+        companyInviteRepo.find({
+          where: { invitedBy: user.id },
+          select: ['id', 'email', 'inviteeDisplayName', 'role', 'expiresAt', 'createdAt'],
+        }),
         this.sharedAnalytics.getUserStatsForExport(user.id, user.discordId ?? null),
       ]);
 
@@ -126,7 +129,14 @@ export class UserDataService {
         companyId: (m as { company?: { id: string; name: string } }).company?.id,
         companyName: (m as { company?: { name: string } }).company?.name,
       })),
-      companyInvitesSent: invitesSent.map((i) => ({ id: i.id, email: i.email, role: i.role, expiresAt: i.expiresAt, createdAt: i.createdAt })),
+      companyInvitesSent: invitesSent.map((i) => ({
+        id: i.id,
+        email: i.email ?? null,
+        inviteeDisplayName: i.inviteeDisplayName ?? null,
+        role: i.role,
+        expiresAt: i.expiresAt,
+        createdAt: i.createdAt,
+      })),
       analytics: {
         totalMessages: analytics.totalMessages,
         totalVoiceMinutes: analytics.totalVoiceMinutes,

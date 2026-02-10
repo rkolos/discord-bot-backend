@@ -5,13 +5,17 @@ import {
   CompanyMember,
   CompanyInvite,
   User,
+  SharedConfigModule,
 } from '@app/shared';
 import { TeamService } from './team.service';
+import { InviteController } from './invite.controller';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Company, CompanyMember, CompanyInvite, User]),
+    SharedConfigModule,
   ],
+  controllers: [InviteController],
   providers: [TeamService],
   exports: [TeamService],
 })

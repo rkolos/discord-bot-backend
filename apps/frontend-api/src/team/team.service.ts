@@ -13,6 +13,7 @@ import {
   CompanyInvite,
   User,
   CompanyMemberRole,
+  SharedConfigService,
 } from '@app/shared';
 
 const INVITE_TOKEN_BYTES = 32;
@@ -29,6 +30,7 @@ export class TeamService {
     private readonly companyInviteRepository: Repository<CompanyInvite>,
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
+    private readonly sharedConfig: SharedConfigService,
   ) {}
 
   private async getDefaultCompanyForUser(userId: string): Promise<Company | null> {
@@ -36,6 +38,66 @@ export class TeamService {
       where: { ownerId: userId },
       order: { createdAt: 'ASC' },
     });
+  }
+
+  async ensureDefaultWorkspace(
+    userId: string,
+    displayName?: string,
+  ): Promise<Company | null> {
+    const existing = await this.companyRepository.findOne({
+      where: { ownerId: userId },
+      order: { createdAt: 'ASC' },
+    });
+    if (existing) return existing;
+
+    const name = displayName?.trim()
+      ? `${displayName.trim()}'s Workspace`
+      : 'My Workspace';
+
+    const company = this.companyRepository.create({
+      name,
+      ownerId: userId,
+    });
+    await this.companyRepository.save(company);
+
+    const now = new Date();
+    await this.companyMemberRepository.save(
+      this.companyMemberRepository.create({
+        companyId: company.id,
+        userId,
+        role: CompanyMemberRole.OWNER,
+        joinedAt: now,
+      }),
+    );
+    return company;
+  }
+
+  async getInvitePreview(token: string): Promise<{
+    companyName: string;
+    inviterName: string;
+    role: string;
+  }> {
+    const invite = await this.companyInviteRepository.findOne({
+      where: { inviteToken: token.trim() },
+      relations: ['company', 'invitedByUser'],
+    });
+    if (!invite) {
+      throw new HttpException(
+        { code: 'INVITE_NOT_FOUND', message: 'Invite not found' },
+        HttpStatus.NOT_FOUND,
+      );
+    }
+    if (invite.expiresAt <= new Date()) {
+      throw new HttpException(
+        { code: 'INVITE_EXPIRED', message: 'Invite has expired' },
+        HttpStatus.GONE,
+      );
+    }
+    return {
+      companyName: invite.company?.name ?? '',
+      inviterName: invite.invitedByUser?.username ?? '',
+      role: invite.role,
+    };
   }
 
   async getTeamMembers(
@@ -72,7 +134,7 @@ export class TeamService {
       );
     }
     const [members, total] = await qb
-      .orderBy('cm.joined_at', 'ASC')
+      .orderBy('cm.joinedAt', 'ASC')
       .skip((Math.max(1, page) - 1) * Math.min(100, Math.max(1, limit)))
       .take(Math.min(100, Math.max(1, limit)))
       .getManyAndCount();
@@ -94,18 +156,13 @@ export class TeamService {
 
   async inviteTeamMember(
     userId: string,
-    email: string,
     role: CompanyMemberRole,
-  ): Promise<{ success: true; inviteToken: string }> {
+    name?: string,
+  ): Promise<{ success: true; inviteToken: string; inviteUrl: string }> {
     const company = await this.getDefaultCompanyForUser(userId);
     if (!company) {
       throw new HttpException(
-        {
-          error: {
-            code: 'INSUFFICIENT_PERMISSIONS',
-            message: 'No workspace found',
-          },
-        },
+        { code: 'INSUFFICIENT_PERMISSIONS', message: 'No workspace found' },
         HttpStatus.FORBIDDEN,
       );
     }
@@ -115,29 +172,75 @@ export class TeamService {
     if (!member || (member.role !== CompanyMemberRole.OWNER && member.role !== CompanyMemberRole.ADMIN)) {
       throw new HttpException(
         {
-          error: {
-            code: 'INSUFFICIENT_PERMISSIONS',
-            message: 'Only Owners and Admins can invite team members',
-          },
+          code: 'INSUFFICIENT_PERMISSIONS',
+          message: 'Only Owners and Admins can invite team members',
         },
         HttpStatus.FORBIDDEN,
       );
     }
-    const normalizedEmail = email.toLowerCase().trim();
     const inviteToken = randomBytes(INVITE_TOKEN_BYTES).toString('hex');
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + INVITE_EXPIRY_DAYS);
     await this.companyInviteRepository.save(
       this.companyInviteRepository.create({
         companyId: company.id,
-        email: normalizedEmail,
+        email: null,
+        inviteeDisplayName: name?.trim() || null,
         role,
         inviteToken,
         invitedBy: userId,
         expiresAt,
       }),
     );
-    return { success: true, inviteToken };
+    const baseUrl =
+      this.sharedConfig.discord.frontendBaseUrl ?? 'http://localhost:3010';
+    const inviteUrl = `${baseUrl.replace(/\/$/, '')}/invite/${inviteToken}`;
+    return { success: true, inviteToken, inviteUrl };
+  }
+
+  async acceptInvite(
+    userId: string,
+    inviteToken: string,
+  ): Promise<{ companyId: string; companyName: string }> {
+    const invite = await this.companyInviteRepository.findOne({
+      where: { inviteToken: inviteToken.trim() },
+      relations: ['company'],
+    });
+    if (!invite) {
+      throw new HttpException(
+        { code: 'INVITE_NOT_FOUND', message: 'Invite not found or already used' },
+        HttpStatus.NOT_FOUND,
+      );
+    }
+    if (invite.expiresAt <= new Date()) {
+      throw new HttpException(
+        { code: 'INVITE_EXPIRED', message: 'Invite has expired' },
+        HttpStatus.GONE,
+      );
+    }
+    const existingMember = await this.companyMemberRepository.findOne({
+      where: { companyId: invite.companyId, userId },
+    });
+    if (existingMember) {
+      throw new HttpException(
+        { code: 'ALREADY_TEAM_MEMBER', message: 'You are already a member of this team' },
+        HttpStatus.CONFLICT,
+      );
+    }
+    const now = new Date();
+    await this.companyMemberRepository.save(
+      this.companyMemberRepository.create({
+        companyId: invite.companyId,
+        userId,
+        role: invite.role,
+        joinedAt: now,
+      }),
+    );
+    await this.companyInviteRepository.remove(invite);
+    return {
+      companyId: invite.company?.id ?? invite.companyId,
+      companyName: invite.company?.name ?? '',
+    };
   }
 
   async updateTeamMemberRole(
@@ -164,12 +267,7 @@ export class TeamService {
     });
     if (!ownerMember || ownerMember.role !== CompanyMemberRole.OWNER) {
       throw new HttpException(
-        {
-          error: {
-            code: 'INSUFFICIENT_PERMISSIONS',
-            message: 'Only Owners can change roles',
-          },
-        },
+        { code: 'INSUFFICIENT_PERMISSIONS', message: 'Only Owners can change roles' },
         HttpStatus.FORBIDDEN,
       );
     }
@@ -212,10 +310,8 @@ export class TeamService {
     if (!currentMember || currentMember.role === CompanyMemberRole.MEMBER) {
       throw new HttpException(
         {
-          error: {
-            code: 'INSUFFICIENT_PERMISSIONS',
-            message: 'Cannot remove yourself or insufficient permissions',
-          },
+          code: 'INSUFFICIENT_PERMISSIONS',
+          message: 'Cannot remove yourself or insufficient permissions',
         },
         HttpStatus.FORBIDDEN,
       );
@@ -232,10 +328,8 @@ export class TeamService {
     if (member.userId === userId) {
       throw new HttpException(
         {
-          error: {
-            code: 'INSUFFICIENT_PERMISSIONS',
-            message: 'Cannot remove yourself or insufficient permissions',
-          },
+          code: 'INSUFFICIENT_PERMISSIONS',
+          message: 'Cannot remove yourself or insufficient permissions',
         },
         HttpStatus.FORBIDDEN,
       );
@@ -243,10 +337,8 @@ export class TeamService {
     if (currentMember.role !== CompanyMemberRole.OWNER && member.role === CompanyMemberRole.OWNER) {
       throw new HttpException(
         {
-          error: {
-            code: 'INSUFFICIENT_PERMISSIONS',
-            message: 'Cannot remove yourself or insufficient permissions',
-          },
+          code: 'INSUFFICIENT_PERMISSIONS',
+          message: 'Cannot remove yourself or insufficient permissions',
         },
         HttpStatus.FORBIDDEN,
       );

@@ -63,6 +63,10 @@ const ENTITIES = [
         const nodeEnv = configService.get<string>('NODE_ENV');
         const runMigrations =
           nodeEnv === 'stage' || nodeEnv === 'production';
+        const ssl =
+          db.host && db.host.includes('ondigitalocean.com')
+            ? { rejectUnauthorized: false }
+            : false;
         return {
           type: 'postgres',
           host: db.host,
@@ -70,6 +74,7 @@ const ENTITIES = [
           username: db.user,
           password: db.password,
           database: db.database,
+          ssl,
           entities: ENTITIES,
           synchronize: false,
           logging: ['error'],

@@ -31,6 +31,12 @@ const postgresHost =
   process.env['POSTGRES_HOST'] ?? process.env['DB_HOST'] ?? 'localhost';
 const postgresPort = process.env['POSTGRES_PORT'] ?? process.env['DB_PORT'] ?? '5432';
 
+/** SSL для DigitalOcean Managed PostgreSQL (требует шифрованное соединение). */
+const postgresSsl =
+  postgresHost && postgresHost.includes('ondigitalocean.com')
+    ? { rejectUnauthorized: false }
+    : false;
+
 /**
  * DataSource для TypeORM CLI (migration:generate, migration:run, migration:revert).
  * Используются POSTGRES_* или fallback DB_HOST/DB_PORT из .env.
@@ -42,6 +48,7 @@ export const AppDataSource = new DataSource({
   username: process.env['POSTGRES_USER'] ?? '',
   password: process.env['POSTGRES_PASSWORD'] ?? '',
   database: process.env['POSTGRES_DB'] ?? '',
+  ssl: postgresSsl,
   entities: [
     ActivityLog,
     AdminRefreshToken,
