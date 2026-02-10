@@ -72,6 +72,34 @@ export class TeamService {
     return company;
   }
 
+  async getMyCompanies(userId: string): Promise<
+    Array<{
+      id: string;
+      name: string;
+      role: string;
+      isOwner: boolean;
+    }>
+  > {
+    const members = await this.companyMemberRepository.find({
+      where: { userId },
+      relations: ['company'],
+      order: { joinedAt: 'ASC' },
+    });
+    const result = members
+      .filter((m) => m.company != null)
+      .map((m) => ({
+        id: m.company!.id,
+        name: m.company!.name,
+        role: m.role,
+        isOwner: m.company!.ownerId === userId,
+      }));
+    result.sort((a, b) => {
+      if (a.isOwner !== b.isOwner) return a.isOwner ? -1 : 1;
+      return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+    });
+    return result;
+  }
+
   async getInvitePreview(token: string): Promise<{
     companyName: string;
     inviterName: string;

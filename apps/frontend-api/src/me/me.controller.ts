@@ -99,6 +99,26 @@ export class MeController {
     );
   }
 
+  @Get('companies')
+  @ApiOperation({
+    summary: 'List my companies (workspaces)',
+    description:
+      'Returns all companies (workspaces) the user has access to: owned and those joined via invite. Use for workspace switcher. Requires Bearer JWT.',
+  })
+  async getMyCompanies(
+    @CurrentUser() user: User,
+  ): Promise<{
+    data: Array<{
+      id: string;
+      name: string;
+      role: string;
+      isOwner: boolean;
+    }>;
+  }> {
+    const data = await this.teamService.getMyCompanies(user.id);
+    return { data };
+  }
+
   @Get('team')
   @ApiOperation({
     summary: 'List team members',
