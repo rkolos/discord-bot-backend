@@ -100,6 +100,8 @@ export class IngestorQueueConsumer implements OnModuleInit, OnModuleDestroy {
     }
 
     const enrichment = await this.guildSettings.getSettings(dto.guildId);
+    const isEventTypeBlacklisted = (eventType: string): boolean =>
+      enrichment.analyticsEventTypesBlacklist.includes(eventType);
 
     const isVoiceEvent =
       dto.eventType === 'VOICE_STATE_UPDATE' || dto.eventType === 'voice_change';
@@ -122,27 +124,34 @@ export class IngestorQueueConsumer implements OnModuleInit, OnModuleDestroy {
       }
       if (!isJoin && userId) {
         const leave = await this.voiceSession.recordLeave(dto.guildId, userId);
-        const payload = {
-          ...((dto.payload as Record<string, unknown>) ?? {}),
-          voiceMinutes: leave?.voiceMinutes ?? 0,
-        };
-        const raw = toRawEventForVoice(dto, payload, enrichment);
-        this.logger.log(`[analytics] pushEvent voice_leave guildId=${dto.guildId} eventId=${dto.eventId}`);
-        this.clickhouseIngestor.pushEvent(raw);
+        if (!isEventTypeBlacklisted('VOICE_STATE_UPDATE')) {
+          const payload = {
+            ...((dto.payload as Record<string, unknown>) ?? {}),
+            voiceMinutes: leave?.voiceMinutes ?? 0,
+          };
+          const raw = toRawEventForVoice(dto, payload, enrichment);
+          this.logger.log(`[analytics] pushEvent voice_leave guildId=${dto.guildId} eventId=${dto.eventId}`);
+          this.clickhouseIngestor.pushEvent(raw);
+        }
         return;
       }
       if (!isJoin && !userId) {
-        const raw = toRawEventForVoice(
-          dto,
-          (dto.payload as Record<string, unknown>) ?? {},
-          enrichment,
-        );
-        this.logger.log(`[analytics] pushEvent voice guildId=${dto.guildId} eventId=${dto.eventId}`);
-        this.clickhouseIngestor.pushEvent(raw);
+        if (!isEventTypeBlacklisted('VOICE_STATE_UPDATE')) {
+          const raw = toRawEventForVoice(
+            dto,
+            (dto.payload as Record<string, unknown>) ?? {},
+            enrichment,
+          );
+          this.logger.log(`[analytics] pushEvent voice guildId=${dto.guildId} eventId=${dto.eventId}`);
+          this.clickhouseIngestor.pushEvent(raw);
+        }
         return;
       }
     }
 
+    if (isEventTypeBlacklisted(dto.eventType)) {
+      return;
+    }
     const raw = toRawEvent(dto, (dto.payload as Record<string, unknown>) ?? {}, enrichment);
     this.logger.log(`[analytics] pushEvent eventType=${dto.eventType} guildId=${dto.guildId} eventId=${dto.eventId}`);
     this.clickhouseIngestor.pushEvent(raw);

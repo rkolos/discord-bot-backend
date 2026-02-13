@@ -314,4 +314,77 @@ export class AnalyticsService {
       pagination: { page: Math.max(1, page), pageSize: limit, total },
     };
   }
+
+  async getEventsTimeSeries(
+    discordGuildId: string,
+    from: string,
+    to: string,
+    groupBy: 'day' | 'week' | 'month',
+    eventTypes: string[] | undefined,
+    timezoneOptions?: AnalyticsTimezoneOptions,
+  ): Promise<Array<{ date: string; eventType: string; count: number }>> {
+    const guild = await this.guildsService.findGuildByIdOrDiscordId(discordGuildId);
+    if (!guild) {
+      throw new NotFoundException({
+        code: 'GUILD_NOT_FOUND',
+        message: 'Guild not found or access denied',
+      });
+    }
+    this.validateDateRange(from, to);
+    this.validatePlanPeriod(guild.subscriptionTier, from, to);
+    const timezone = await this.resolveTimezone(discordGuildId, timezoneOptions);
+    return this.sharedAnalytics.getEventsTimeSeriesByGuildId(
+      guild.id,
+      from,
+      to,
+      groupBy ?? 'day',
+      eventTypes,
+      timezone,
+    );
+  }
+
+  async getEventsSearch(
+    discordGuildId: string,
+    from: string,
+    to: string,
+    options: {
+      eventTypes?: string[];
+      channelId?: string;
+      limit: number;
+      cursor?: { eventId: string; eventTime: string };
+    },
+  ): Promise<{
+    data: Array<{
+      eventId: string;
+      eventTime: string;
+      eventType: string;
+      channelId: string | null;
+      channelName: string | null;
+      payloadSummary?: Record<string, unknown>;
+    }>;
+    nextCursor?: { eventId: string; eventTime: string };
+  }> {
+    const guild = await this.guildsService.findGuildByIdOrDiscordId(discordGuildId);
+    if (!guild) {
+      throw new NotFoundException({
+        code: 'GUILD_NOT_FOUND',
+        message: 'Guild not found or access denied',
+      });
+    }
+    this.validateDateRange(from, to);
+    this.validatePlanPeriod(guild.subscriptionTier, from, to);
+    const [result, channels] = await Promise.all([
+      this.sharedAnalytics.getEventsByGuildId(guild.id, from, to, options),
+      this.guildsService.getChannelsWithTypeForGuild(discordGuildId),
+    ]);
+    const channelNameMap = new Map(channels.map((c) => [c.id, c.name]));
+    return {
+      ...result,
+      data: result.data.map((e) => ({
+        ...e,
+        channelName:
+          e.channelId != null ? (channelNameMap.get(e.channelId) ?? null) : null,
+      })),
+    };
+  }
 }

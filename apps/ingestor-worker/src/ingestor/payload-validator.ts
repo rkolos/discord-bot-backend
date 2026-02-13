@@ -62,7 +62,14 @@ export function validatePayloadByEventType(
     }
 
     case 'GUILD_MEMBER_ADD':
-    case 'GUILD_MEMBER_REMOVE': {
+    case 'GUILD_MEMBER_REMOVE':
+    case 'GUILD_MEMBER_UPDATE':
+    case 'MESSAGE_UPDATE':
+    case 'MESSAGE_DELETE':
+    case 'THREAD_CREATE':
+    case 'GUILD_CREATE':
+    case 'GUILD_DELETE':
+    case 'PRESENCE_UPDATE': {
       return { valid: true };
     }
 

@@ -216,12 +216,19 @@ async function run(): Promise<void> {
             direction: 'set',
             value: 'installed',
           });
+          const guildCreateData = enrichGuildData(toEventData(guild), guild);
           publishDiscordEvent(redis, prefix, {
             guildId: result.syncedGuildId,
             discordGuildId: guild.id,
             eventType: 'GUILD_CREATE',
-            data: enrichGuildData(toEventData(guild), guild),
+            data: guildCreateData,
           });
+          await eventHandlers.enqueueDiscordEvent(
+            result.syncedGuildId,
+            guild.id,
+            'GUILD_CREATE',
+            guildCreateData,
+          );
           const url = `${internalBaseUrl()}/internal/guilds/${result.syncedGuildId}/sync`;
           const secret = process.env['INTERNAL_API_SECRET'];
           await fetch(url, {
@@ -276,12 +283,19 @@ async function run(): Promise<void> {
           direction: 'set',
           value: false,
         });
+        const guildDeleteData = enrichGuildData(toEventData(guild), guild);
         publishDiscordEvent(redis, prefix, {
           guildId: existingGuild.id,
           discordGuildId: guild.id,
           eventType: 'GUILD_DELETE',
-          data: enrichGuildData(toEventData(guild), guild),
+          data: guildDeleteData,
         });
+        await eventHandlers.enqueueDiscordEvent(
+          existingGuild.id,
+          guild.id,
+          'GUILD_DELETE',
+          guildDeleteData,
+        );
       }
     } catch (err) {
       console.error(`[shard-worker] guildDelete sync error: ${(err as Error).message}`);
@@ -425,12 +439,19 @@ async function run(): Promise<void> {
           name: thread.name ?? null,
         },
       });
+      const threadCreateData = enrichThreadData(toEventData(thread), thread);
       publishDiscordEvent(redis, prefix, {
         guildId,
         discordGuildId,
         eventType: 'THREAD_CREATE',
-        data: enrichThreadData(toEventData(thread), thread),
+        data: threadCreateData,
       });
+      await eventHandlers.enqueueDiscordEvent(
+        guildId,
+        discordGuildId,
+        'THREAD_CREATE',
+        threadCreateData,
+      );
     } catch (err) {
       console.error(`[shard-worker] threadCreate error: ${(err as Error).message}`);
     }

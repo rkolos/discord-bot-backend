@@ -56,6 +56,18 @@ export class ServerSettings {
   @Column({ name: 'allow_public_widgets', type: 'boolean', default: true })
   allowPublicWidgets: boolean;
 
+  /** Список типов событий Discord, которые не писать в ClickHouse. null/пусто = по умолчанию только PRESENCE_UPDATE. */
+  @Column({
+    name: 'analytics_event_types_blacklist',
+    type: 'jsonb',
+    nullable: true,
+    transformer: {
+      to: (v: string[] | null) => (v == null || v.length === 0 ? null : v),
+      from: (v: unknown) => (Array.isArray(v) ? (v as string[]) : null),
+    },
+  })
+  analyticsEventTypesBlacklist: string[] | null;
+
   @UpdateDateColumn({ name: 'updated_at', type: 'timestamptz' })
   updatedAt: Date;
 }

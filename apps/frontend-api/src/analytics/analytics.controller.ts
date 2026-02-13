@@ -4,11 +4,14 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { GuildAdminGuard } from '../guilds/guards/guild-admin.guard';
 import { GuildIdParamDto } from '../guilds/dto/guild-id-param.dto';
 import { AnalyticsService } from './analytics.service';
+import { ANALYTICS_EVENT_TYPES_FOR_UI } from '@app/shared';
 import {
   ActivityChartQueryDto,
   OverviewQueryDto,
   TopMembersQueryDto,
   AnalyticsQueryDto,
+  EventsTimeseriesQueryDto,
+  EventsSearchQueryDto,
 } from './dto';
 
 @ApiTags('Analytics')
@@ -157,5 +160,73 @@ export class AnalyticsController {
       query.limit ?? 10,
     );
     return { data };
+  }
+
+  @Get('event-types')
+  @ApiOperation({
+    summary: 'Get event types for filters',
+    description:
+      'Returns list of Discord event types available for filtering in analytics. Bearer JWT, guild admin.',
+  })
+  async getEventTypes(): Promise<{ data: string[] }> {
+    return { data: [...ANALYTICS_EVENT_TYPES_FOR_UI] };
+  }
+
+  @Get('events-timeseries')
+  @ApiOperation({
+    summary: 'Get events time series by type',
+    description:
+      'Returns time series of event counts grouped by date (day/week/month) and event type. Query: from, to, groupBy, eventTypes, timezone. Bearer JWT, guild admin.',
+  })
+  async getEventsTimeSeries(
+    @Param() params: GuildIdParamDto,
+    @Query() query: EventsTimeseriesQueryDto,
+    @Headers('x-timezone') xTimezone?: string,
+  ): Promise<{
+    data: Array<{ date: string; eventType: string; count: number }>;
+  }> {
+    const data = await this.analyticsService.getEventsTimeSeries(
+      params.guildId,
+      query.from,
+      query.to,
+      query.groupBy ?? 'day',
+      query.eventTypes,
+      { headerTimezone: xTimezone, queryTimezone: query.timezone },
+    );
+    return { data };
+  }
+
+  @Get('events')
+  @ApiOperation({
+    summary: 'Search events',
+    description:
+      'Returns paginated list of raw events with optional filters by event type and channel. Each event includes channelName (from Discord). Query: from, to, eventTypes, channelId, limit, cursor. Bearer JWT, guild admin.',
+  })
+  async getEventsSearch(
+    @Param() params: GuildIdParamDto,
+    @Query() query: EventsSearchQueryDto,
+  ): Promise<{
+    data: Array<{
+      eventId: string;
+      eventTime: string;
+      eventType: string;
+      channelId: string | null;
+      channelName: string | null;
+      payloadSummary?: Record<string, unknown>;
+    }>;
+    nextCursor?: { eventId: string; eventTime: string };
+  }> {
+    const result = await this.analyticsService.getEventsSearch(
+      params.guildId,
+      query.from,
+      query.to,
+      {
+        eventTypes: query.eventTypes,
+        channelId: query.channelId,
+        limit: query.limit ?? 50,
+        cursor: query.cursor,
+      },
+    );
+    return result;
   }
 }

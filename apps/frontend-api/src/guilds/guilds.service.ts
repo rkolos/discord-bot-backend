@@ -45,6 +45,9 @@ const DEFAULT_LANGUAGE = 'en';
 
 const BOT_TOKEN_MASK = '********';
 
+/** Типы событий Discord, которые по умолчанию не пишутся в ClickHouse. */
+export const DEFAULT_ANALYTICS_EVENT_TYPES_BLACKLIST = ['PRESENCE_UPDATE'];
+
 export interface GuildSettingsResponseDto {
   serverName: string;
   serverDescription: string | null;
@@ -59,6 +62,8 @@ export interface GuildSettingsResponseDto {
   anonymizeUserData: boolean;
   shareAnalytics: boolean;
   allowPublicWidgets: boolean;
+  /** Типы событий Discord, которые не писать в ClickHouse (null/пусто = по умолчанию только PRESENCE_UPDATE). */
+  analyticsEventTypesBlacklist: string[];
   modules: Array<{ id: string; name: string; enabled: boolean; hasError: boolean }>;
 }
 
@@ -346,6 +351,7 @@ export class GuildsService {
       anonymizeUserData?: boolean;
       shareAnalytics?: boolean;
       allowPublicWidgets?: boolean;
+      analyticsEventTypesBlacklist?: string[] | null;
     },
   ): Promise<GuildSettingsResponseDto> {
     const guild = await this.findGuildByIdOrDiscordId(guildIdOrDiscordId);
@@ -377,6 +383,11 @@ export class GuildsService {
       settings.shareAnalytics = dto.shareAnalytics;
     if (dto.allowPublicWidgets !== undefined)
       settings.allowPublicWidgets = dto.allowPublicWidgets;
+    if (dto.analyticsEventTypesBlacklist !== undefined)
+      settings.analyticsEventTypesBlacklist =
+        dto.analyticsEventTypesBlacklist == null || dto.analyticsEventTypesBlacklist.length === 0
+          ? null
+          : dto.analyticsEventTypesBlacklist;
     await this.serverSettingsRepository.save(settings);
     if (dto.botToken !== undefined) {
       await this.updateToken(guildIdOrDiscordId, { botToken: dto.botToken });
@@ -443,6 +454,11 @@ export class GuildsService {
     });
     const hasToken =
       settings.botTokenEncrypted != null && settings.botTokenEncrypted.length > 0;
+    const rawBlacklist = settings.analyticsEventTypesBlacklist;
+    const analyticsEventTypesBlacklist =
+      Array.isArray(rawBlacklist) && rawBlacklist.length > 0
+        ? rawBlacklist
+        : DEFAULT_ANALYTICS_EVENT_TYPES_BLACKLIST;
     return {
       serverName: settings.serverName,
       serverDescription: settings.serverDescription,
@@ -456,6 +472,7 @@ export class GuildsService {
       anonymizeUserData: settings.anonymizeUserData,
       shareAnalytics: settings.shareAnalytics,
       allowPublicWidgets: settings.allowPublicWidgets,
+      analyticsEventTypesBlacklist,
       modules: modules.map((m) => ({
         id: m.id,
         name:

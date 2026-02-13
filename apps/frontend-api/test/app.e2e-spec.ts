@@ -449,6 +449,7 @@ describe('Frontend API E2E (analytics)', () => {
           anonymizeUserData: false,
           shareAnalytics: false,
           allowPublicWidgets: false,
+          analyticsEventTypesBlacklist: ['PRESENCE_UPDATE'],
           modules: [],
         }) as Awaited<ReturnType<GuildsService['getSettings']>>,
     };

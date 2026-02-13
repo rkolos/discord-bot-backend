@@ -6,6 +6,9 @@ All analytics endpoints require authentication.
 
 1. [Analytics Data](#91-analytics-data)
 2. [Heatmap](#92-heatmap)
+3. [Event Types](#93-event-types)
+4. [Events Time Series](#94-events-time-series)
+5. [Events Search](#95-events-search)
 
 ---
 
@@ -158,6 +161,80 @@ All analytics endpoints require authentication.
 ```
 
 **Note:** `dayOfWeek` is 0-6 (Sunday=0, Saturday=6), `hour` is 0-23. When there is no activity data, the endpoint returns all cells (dayOfWeek × hour) with `value: 0` (see behavior when no data in 9.1.1).
+
+---
+
+## 9.3 Event Types
+
+### 9.3.1 Get Event Types
+
+**Endpoint:** `GET /api/guilds/:guildId/analytics/event-types`
+
+**Description:** Returns list of Discord event types available for filtering in analytics (events-timeseries, events search) and for the analytics blacklist setting.
+
+**Headers:** `Authorization: Bearer <token>` (required)
+
+**Path Parameters:** `guildId` (string, required)
+
+**Response:** `200 OK`
+```json
+{
+  "data": ["MESSAGE_CREATE", "MESSAGE_UPDATE", "MESSAGE_DELETE", "GUILD_MEMBER_ADD", "GUILD_MEMBER_REMOVE", "GUILD_MEMBER_UPDATE", "VOICE_STATE_UPDATE", "THREAD_CREATE", "GUILD_CREATE", "GUILD_DELETE", "PRESENCE_UPDATE"]
+}
+```
+
+---
+
+## 9.4 Events Time Series
+
+### 9.4.1 Get Events Time Series
+
+**Endpoint:** `GET /api/guilds/:guildId/analytics/events-timeseries`
+
+**Description:** Returns time series of event counts grouped by date (day/week/month) and event type.
+
+**Query Parameters:** `from` (required), `to` (required), `groupBy` (optional: day | week | month), `eventTypes` (optional array), `timezone` (optional)
+
+**Response:** `200 OK`
+```json
+{
+  "data": [
+    { "date": "2026-01-15", "eventType": "MESSAGE_CREATE", "count": 120 },
+    { "date": "2026-01-15", "eventType": "GUILD_MEMBER_ADD", "count": 3 }
+  ]
+}
+```
+
+---
+
+## 9.5 Events Search
+
+### 9.5.1 Get Events (Search)
+
+**Endpoint:** `GET /api/guilds/:guildId/analytics/events`
+
+**Description:** Returns paginated list of raw events with optional filters. Each event includes `channelName` (from Discord) when available.
+
+**Query Parameters:** `from` (required), `to` (required), `eventTypes` (optional array), `channelId` (optional), `limit` (optional, 1–100, default 50), `cursor` (optional: `{ eventId, eventTime }` for next page)
+
+**Response:** `200 OK`
+```json
+{
+  "data": [
+    {
+      "eventId": "uuid",
+      "eventTime": "2026-01-15T12:00:00.000Z",
+      "eventType": "MESSAGE_CREATE",
+      "channelId": "123456789",
+      "channelName": "general",
+      "payloadSummary": { "userId": "999", "messageId": "111" }
+    }
+  ],
+  "nextCursor": { "eventId": "uuid", "eventTime": "2026-01-15T11:00:00.000Z" }
+}
+```
+
+**Pagination:** Pass `cursor` from `nextCursor` in the next request with the same `from`, `to`, and filters to fetch the next page. If `nextCursor` is absent, there are no more pages.
 
 ---
 

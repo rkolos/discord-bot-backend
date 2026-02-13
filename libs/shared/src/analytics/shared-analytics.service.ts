@@ -599,6 +599,185 @@ export class SharedAnalyticsService {
     };
   }
 
+  /**
+   * Временной ряд по типам событий для произвольного периода.
+   * Группировка по day/week/month и event_type.
+   */
+  async getEventsTimeSeriesByGuildId(
+    guildId: string,
+    from: string,
+    to: string,
+    groupBy: 'day' | 'week' | 'month',
+    eventTypes?: string[],
+    _timezone?: string,
+  ): Promise<Array<{ date: string; eventType: string; count: number }>> {
+    const db = this.getDatabase();
+    const fromDate = from.slice(0, 10);
+    const toDate = to.slice(0, 10);
+    const groupExpr =
+      groupBy === 'day'
+        ? 'toDate(event_time)'
+        : groupBy === 'week'
+          ? 'toStartOfWeek(toDate(event_time))'
+          : 'toStartOfMonth(toDate(event_time))';
+    const eventFilter =
+      eventTypes != null && eventTypes.length > 0
+        ? `AND event_type IN {eventTypes:Array(String)}`
+        : '';
+    const queryParams: Record<string, unknown> = {
+      guildId,
+      from: fromDate,
+      to: toDate,
+    };
+    if (eventTypes != null && eventTypes.length > 0) {
+      queryParams.eventTypes = eventTypes;
+    }
+    const result = await this.clickhouse.query({
+      query: `
+        SELECT
+          ${groupExpr} AS date,
+          event_type AS eventType,
+          count() AS count
+        FROM ${db}.raw_events
+        WHERE guild_id = {guildId:UUID}
+          AND event_date >= {from:Date}
+          AND event_date <= {to:Date}
+          ${eventFilter}
+        GROUP BY date, event_type
+        ORDER BY date ASC, eventType ASC
+      `,
+      query_params: queryParams,
+    });
+    const rows = (await result.json()) as { date: string; eventType: string; count: string | number }[];
+    const data = Array.isArray(rows)
+      ? rows
+      : (rows as unknown as { data?: typeof rows }).data ?? [];
+    return data.map((row) => ({
+      date: String(row.date).slice(0, 10),
+      eventType: String(row.eventType),
+      count: Number(row.count ?? 0),
+    }));
+  }
+
+  /**
+   * Поиск событий по гильдии с фильтрами и пагинацией по курсору.
+   */
+  async getEventsByGuildId(
+    guildId: string,
+    from: string,
+    to: string,
+    options: {
+      eventTypes?: string[];
+      channelId?: string;
+      limit: number;
+      cursor?: { eventId: string; eventTime: string };
+    },
+  ): Promise<{
+    data: Array<{
+      eventId: string;
+      eventTime: string;
+      eventType: string;
+      channelId: string | null;
+      payloadSummary?: Record<string, unknown>;
+    }>;
+    nextCursor?: { eventId: string; eventTime: string };
+  }> {
+    const db = this.getDatabase();
+    const fromDate = from.slice(0, 10);
+    const toDate = to.slice(0, 10);
+    const limit = Math.min(Math.max(1, options.limit), 100);
+    const eventFilter =
+      options.eventTypes != null && options.eventTypes.length > 0
+        ? `AND event_type IN {eventTypes:Array(String)}`
+        : '';
+    const channelFilter =
+      options.channelId != null && options.channelId.trim() !== ''
+        ? `AND channel_id = {channelId:String}`
+        : '';
+    const cursorCondition =
+      options.cursor != null
+        ? `AND (event_time, event_id) < (toDateTime({cursorTime:String}), {cursorId:UUID})`
+        : '';
+    const queryParams: Record<string, unknown> = {
+      guildId,
+      from: fromDate,
+      to: toDate,
+      limit: limit + 1,
+    };
+    if (options.eventTypes != null && options.eventTypes.length > 0) {
+      queryParams.eventTypes = options.eventTypes;
+    }
+    if (options.channelId != null && options.channelId.trim() !== '') {
+      queryParams.channelId = options.channelId;
+    }
+    if (options.cursor != null) {
+      queryParams.cursorTime = options.cursor.eventTime.replace('T', ' ').replace('Z', '').slice(0, 19);
+      queryParams.cursorId = options.cursor.eventId;
+    }
+    const result = await this.clickhouse.query({
+      query: `
+        SELECT event_id, event_time, event_type, channel_id, payload
+        FROM ${db}.raw_events
+        WHERE guild_id = {guildId:UUID}
+          AND event_date >= {from:Date}
+          AND event_date <= {to:Date}
+          ${eventFilter}
+          ${channelFilter}
+          ${cursorCondition}
+        ORDER BY event_time DESC, event_id DESC
+        LIMIT {limit:UInt32}
+      `,
+      query_params: queryParams,
+    });
+    const rows = (await result.json()) as Array<{
+      event_id: string;
+      event_time: string;
+      event_type: string;
+      channel_id: string;
+      payload: string;
+    }>;
+    const data = Array.isArray(rows)
+      ? rows
+      : (rows as unknown as { data?: typeof rows }).data ?? [];
+    const hasMore = data.length > limit;
+    const slice = hasMore ? data.slice(0, limit) : data;
+    const nextCursor =
+      hasMore && slice.length > 0
+        ? {
+            eventId: slice[slice.length - 1].event_id,
+            eventTime: String(slice[slice.length - 1].event_time).replace(' ', 'T') + 'Z',
+          }
+        : undefined;
+    return {
+      data: slice.map((row) => ({
+        eventId: row.event_id,
+        eventTime: String(row.event_time).replace(' ', 'T') + 'Z',
+        eventType: row.event_type,
+        channelId: row.channel_id != null && row.channel_id !== '' ? row.channel_id : null,
+        payloadSummary: this.summarizePayload(row.payload, row.event_type),
+      })),
+      nextCursor,
+    };
+  }
+
+  private summarizePayload(
+    payloadJson: string,
+    _eventType: string,
+  ): Record<string, unknown> | undefined {
+    try {
+      const p = JSON.parse(payloadJson) as Record<string, unknown>;
+      if (p == null || typeof p !== 'object') return undefined;
+      const out: Record<string, unknown> = {};
+      for (const k of Object.keys(p).slice(0, 12)) {
+        const v = p[k];
+        if (v !== undefined && v !== null && typeof v !== 'object') out[k] = v;
+      }
+      return Object.keys(out).length > 0 ? out : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
   private async parseSingleNumber(
     result: Awaited<ReturnType<ClickHouseService['query']>>,
     defaultValue: number,

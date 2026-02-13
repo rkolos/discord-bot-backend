@@ -52,6 +52,14 @@ export interface ShardEventHandlersOptions {
   fetchChannel: (channelId: string) => Promise<{ send: (opts: { embeds: unknown[] }) => Promise<unknown> } | null>;
 }
 
+/** Ставит событие Discord в очередь аналитики (ingestor). */
+export type EnqueueDiscordEvent = (
+  guildId: string,
+  discordGuildId: string,
+  eventType: string,
+  data: Record<string, unknown>,
+) => Promise<void>;
+
 type GuildMemberLike = { guild: { id: string; memberCount?: number }; user?: { id: string; tag?: string } };
 type MessageLike = {
   id?: string;
@@ -294,17 +302,22 @@ export function createShardEventHandlers(options: ShardEventHandlersOptions) {
       return;
     }
 
+    const queueEventType = eventType === 'role_update' ? null : eventType;
+    if (queueEventType) {
+      await rawEventsQueue.add(queueEventType, rawPayload, { priority: 0 }).catch((err) => {
+        console.error(`[shard-events] raw-events enqueue error: ${(err as Error).message}`);
+      });
+    }
+
     const logType = logEventType ?? eventType;
     const settings = await getLogSettings(guildId);
     const setting = settings.get(logType);
     if (!setting?.enabled || !setting.channelId) {
-      console.log(`[analytics] skip enqueue: no log channel eventType=${eventType} guildId=${guildId}`);
       return;
     }
 
     const channel = await fetchChannel(setting.channelId);
     if (!channel) {
-      console.log(`[analytics] skip enqueue: log channel unreachable eventType=${eventType} guildId=${guildId}`);
       return;
     }
 
@@ -312,11 +325,6 @@ export function createShardEventHandlers(options: ShardEventHandlersOptions) {
     const embed = embedFromData(embedData);
     await channel.send({ embeds: [embed] }).catch((err) => {
       console.error(`[shard-events] send log error: ${(err as Error).message}`);
-    });
-
-    console.log(`[analytics] enqueue eventType=${eventType} guildId=${guildId} eventId=${eventId}`);
-    await rawEventsQueue.add(eventType, rawPayload, { priority: 0 }).catch((err) => {
-      console.error(`[shard-events] raw-events enqueue error: ${(err as Error).message}`);
     });
   }
 
@@ -418,13 +426,15 @@ export function createShardEventHandlers(options: ShardEventHandlersOptions) {
       await sendLogAndIngest(
         discordGuildId,
         guildId,
-        'member_join',
+        'GUILD_MEMBER_ADD',
         { userId: member.user?.id, userTag: member.user?.tag },
         {
           userTag: member.user?.tag ?? undefined,
           userId: member.user?.id ?? undefined,
           timestamp: new Date().toISOString(),
         },
+        undefined,
+        'member_join',
       );
       if (guildId) {
         publishDiscordEvent(redis, redisPrefix, {
@@ -457,13 +467,15 @@ export function createShardEventHandlers(options: ShardEventHandlersOptions) {
       await sendLogAndIngest(
         discordGuildId,
         guildId,
-        'member_leave',
+        'GUILD_MEMBER_REMOVE',
         { userId: member.user?.id, userTag: member.user?.tag },
         {
           userTag: member.user?.tag ?? undefined,
           userId: member.user?.id ?? undefined,
           timestamp: new Date().toISOString(),
         },
+        undefined,
+        'member_leave',
       );
       if (guildId) {
         publishDiscordEvent(redis, redisPrefix, {
@@ -486,7 +498,7 @@ export function createShardEventHandlers(options: ShardEventHandlersOptions) {
       await sendLogAndIngest(
         discordGuildId,
         guildId,
-        'message_delete',
+        'MESSAGE_DELETE',
         { messageId: message.id, channelId: message.channelId, userId: message.author?.id },
         {
           channelName: (message.channel as { name?: string })?.name ?? undefined,
@@ -495,6 +507,8 @@ export function createShardEventHandlers(options: ShardEventHandlersOptions) {
           messageContent: message.content ?? undefined,
           timestamp: new Date().toISOString(),
         },
+        undefined,
+        'message_delete',
       );
       if (guildId) {
         publishDiscordEvent(redis, redisPrefix, {
@@ -535,10 +549,7 @@ export function createShardEventHandlers(options: ShardEventHandlersOptions) {
           messageContent: message.content ?? undefined,
           timestamp: new Date().toISOString(),
         },
-        {
-          channelId: message.channelId,
-          discordUserId: message.author?.id,
-        },
+        { channelId: message.channelId, discordUserId: message.author?.id },
         'message_create',
       );
       if (guildId) {
@@ -574,7 +585,7 @@ export function createShardEventHandlers(options: ShardEventHandlersOptions) {
       await sendLogAndIngest(
         discordGuildId,
         guildId,
-        'message_edit',
+        'MESSAGE_UPDATE',
         { messageId: newMessage?.id, channelId: oldMessage.channelId },
         {
           channelName: (oldMessage.channel as { name?: string })?.name ?? undefined,
@@ -584,6 +595,8 @@ export function createShardEventHandlers(options: ShardEventHandlersOptions) {
           newContent: newMessage?.content ?? undefined,
           timestamp: new Date().toISOString(),
         },
+        undefined,
+        'message_edit',
       );
       if (guildId) {
         publishDiscordEvent(redis, redisPrefix, {
@@ -686,6 +699,17 @@ export function createShardEventHandlers(options: ShardEventHandlersOptions) {
           eventType: 'GUILD_MEMBER_UPDATE',
           data: { old: safeToJson(oldMember), new: safeToJson(newMember) },
         });
+        const guildMemberUpdatePayload: RawEventJobPayload = {
+          eventId: randomUUID(),
+          eventType: 'GUILD_MEMBER_UPDATE',
+          eventTime: new Date().toISOString(),
+          guildId,
+          discordGuildId,
+          payload: { old: safeToJson(oldMember), new: safeToJson(newMember) },
+        };
+        await rawEventsQueue.add('GUILD_MEMBER_UPDATE', guildMemberUpdatePayload, { priority: 0 }).catch((err) => {
+          console.error(`[shard-events] raw-events enqueue error: ${(err as Error).message}`);
+        });
       }
 
       const oldRoleNames = Array.from(oldMember.roles.cache?.values() ?? []).map((r) => r.name);
@@ -766,6 +790,36 @@ export function createShardEventHandlers(options: ShardEventHandlersOptions) {
         discordGuildId,
         eventType: 'PRESENCE_UPDATE',
         data: { old: safeToJson(oldPresence), new: safeToJson(newPresence) },
+      });
+      const presencePayload: RawEventJobPayload = {
+        eventId: randomUUID(),
+        eventType: 'PRESENCE_UPDATE',
+        eventTime: new Date().toISOString(),
+        guildId,
+        discordGuildId,
+        payload: { old: safeToJson(oldPresence), new: safeToJson(newPresence) },
+      };
+      await rawEventsQueue.add('PRESENCE_UPDATE', presencePayload, { priority: 0 }).catch((err) => {
+        console.error(`[shard-events] raw-events enqueue error: ${(err as Error).message}`);
+      });
+    },
+
+    async enqueueDiscordEvent(
+      guildId: string,
+      discordGuildId: string,
+      eventType: string,
+      data: Record<string, unknown>,
+    ): Promise<void> {
+      const payload: RawEventJobPayload = {
+        eventId: randomUUID(),
+        eventType,
+        eventTime: new Date().toISOString(),
+        guildId,
+        discordGuildId,
+        payload: data,
+      };
+      await rawEventsQueue.add(eventType, payload, { priority: 0 }).catch((err) => {
+        console.error(`[shard-events] raw-events enqueue error: ${(err as Error).message}`);
       });
     },
 
