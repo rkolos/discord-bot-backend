@@ -31,9 +31,15 @@ const postgresHost =
   process.env['POSTGRES_HOST'] ?? process.env['DB_HOST'] ?? 'localhost';
 const postgresPort = process.env['POSTGRES_PORT'] ?? process.env['DB_PORT'] ?? '5432';
 
-/** SSL для DigitalOcean Managed PostgreSQL (требует шифрованное соединение). */
+/**
+ * SSL для DigitalOcean Managed PostgreSQL (требует шифрованное соединение).
+ * Включается, если хост содержит ondigitalocean.com или задано POSTGRES_SSL=true
+ * (нужно при подключении по private IP в VPC, где хост — 10.x.x.x).
+ */
 const postgresSsl =
-  postgresHost && postgresHost.includes('ondigitalocean.com')
+  process.env['POSTGRES_SSL'] === 'true' ||
+  process.env['POSTGRES_SSL'] === '1' ||
+  (postgresHost && postgresHost.includes('ondigitalocean.com'))
     ? { rejectUnauthorized: false }
     : false;
 

@@ -1,13 +1,11 @@
 import {
   registerDecorator,
   IsEnum,
-  IsNotEmpty,
   IsNumber,
   IsOptional,
   IsString,
   MaxLength,
   Min,
-  ValidateIf,
   type ValidationArguments,
   type ValidationOptions,
 } from 'class-validator';
@@ -19,22 +17,29 @@ import {
   Snowflake,
 } from '@app/shared';
 
-function RoleIdEmptyWhenMetricNotRole(validationOptions?: ValidationOptions) {
+const SNOWFLAKE_REGEX = /^\d{17,19}$/;
+
+function RoleIdForCreateCounter(validationOptions?: ValidationOptions) {
   return function (object: object, propertyName: string): void {
     registerDecorator({
-      name: 'roleIdEmptyWhenMetricNotRole',
+      name: 'roleIdForCreateCounter',
       target: object.constructor,
       propertyName,
       options: validationOptions,
       validator: {
         validate(value: unknown, args: ValidationArguments): boolean {
           const o = args.object as { metric?: CounterMetric | null; roleId?: string | null };
-          if (o.metric !== CounterMetric.ROLE) {
-            return value == null || value === '';
+          if (o.metric === CounterMetric.ROLE) {
+            if (value == null || value === '') return false;
+            return typeof value === 'string' && SNOWFLAKE_REGEX.test(value);
           }
-          return true;
+          return value == null || value === '';
         },
-        defaultMessage(): string {
+        defaultMessage(args: ValidationArguments): string {
+          const o = args.object as { metric?: CounterMetric | null };
+          if (o.metric === CounterMetric.ROLE) {
+            return 'roleId is required when metric is role';
+          }
           return 'roleId must be empty when metric is not role';
         },
       },
@@ -53,12 +58,7 @@ export class CreateCounterDto {
   @IsEnum(CounterMetric)
   metric?: CounterMetric | null;
 
-  @IsOptional()
-  @ValidateIf((o: CreateCounterDto) => o.metric === CounterMetric.ROLE)
-  @IsNotEmpty({ message: 'roleId is required when metric is role' })
-  @Snowflake()
-  @ValidateIf((o: CreateCounterDto) => o.metric !== CounterMetric.ROLE)
-  @RoleIdEmptyWhenMetricNotRole()
+  @RoleIdForCreateCounter()
   roleId?: string | null;
 
   @IsString()

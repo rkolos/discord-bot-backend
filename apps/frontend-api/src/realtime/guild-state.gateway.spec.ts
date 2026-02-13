@@ -2,12 +2,13 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { JwtModule } from '@nestjs/jwt';
 import { SharedConfigService } from '@app/shared';
 import type { GuildStateEventPayload } from '@app/shared';
-import { GuildsService } from '../guilds/guilds.service';
+import { GuildsRealtimeService } from '../guilds/guilds-realtime.service';
+import { RealtimeSocketService } from './realtime-socket.service';
 import { GuildStateGateway } from './guild-state.gateway';
 
 describe('GuildStateGateway', () => {
   let gateway: GuildStateGateway;
-  let guildsService: jest.Mocked<Pick<GuildsService, 'findGuildByIdOrDiscordId' | 'userHasGuildAdmin'>>;
+  let guildsService: jest.Mocked<Pick<GuildsRealtimeService, 'findGuildByIdOrDiscordId' | 'userHasGuildAdmin'>>;
 
   beforeEach(async () => {
     guildsService = {
@@ -19,7 +20,8 @@ describe('GuildStateGateway', () => {
       providers: [
         GuildStateGateway,
         { provide: SharedConfigService, useValue: { auth: { jwtSecret: 'test-secret' } } },
-        { provide: GuildsService, useValue: guildsService },
+        { provide: GuildsRealtimeService, useValue: guildsService },
+        { provide: RealtimeSocketService, useValue: { setServer: jest.fn(), isReady: jest.fn().mockReturnValue(true), getServer: jest.fn() } },
       ],
     }).compile();
     gateway = module.get(GuildStateGateway);

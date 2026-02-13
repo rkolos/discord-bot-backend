@@ -41,6 +41,6 @@ describe('CreateCounterDto', () => {
     expect(errors.length).toBeGreaterThan(0);
     const roleIdError = errors.find((e) => e.property === 'roleId');
     expect(roleIdError).toBeDefined();
-    expect(roleIdError?.constraints?.roleIdEmptyWhenMetricNotRole).toContain('roleId must be empty');
+    expect(roleIdError?.constraints?.roleIdForCreateCounter).toContain('roleId must be empty');
   });
 });

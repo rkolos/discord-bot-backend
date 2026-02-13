@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { ClickHouseService, SharedConfigService } from '@app/shared';
+import { ClickHouseService, RedisService, SharedConfigService } from '@app/shared';
 import { ClickHouseIngestorService } from './clickhouse-ingestor.service';
 import type { RawEvent } from './ingestor.types';
 
@@ -28,6 +28,13 @@ describe('ClickHouse Ingestor performance (buffer batching)', () => {
       clickhouse: { database: 'default' },
       ingestor: { batchSize: 1000, batchIntervalMs: 5000 },
       auth: { anonymizationSalt: 'test-salt' },
+      redis: { prefix: 'sn:dev:' },
+    };
+    const mockRedis = {
+      getClient: jest.fn().mockReturnValue({
+        set: jest.fn().mockResolvedValue('OK'),
+        publish: jest.fn().mockResolvedValue(1),
+      }),
     };
 
     const mod: TestingModule = await Test.createTestingModule({
@@ -35,6 +42,7 @@ describe('ClickHouse Ingestor performance (buffer batching)', () => {
         ClickHouseIngestorService,
         { provide: ClickHouseService, useValue: mockClickhouse },
         { provide: SharedConfigService, useValue: mockConfig },
+        { provide: RedisService, useValue: mockRedis },
       ],
     }).compile();
 

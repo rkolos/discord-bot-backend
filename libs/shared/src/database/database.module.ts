@@ -63,8 +63,11 @@ const ENTITIES = [
         const nodeEnv = configService.get<string>('NODE_ENV');
         const runMigrations =
           nodeEnv === 'stage' || nodeEnv === 'production';
+        const postgresSslEnv = configService.get<string>('POSTGRES_SSL');
         const ssl =
-          db.host && db.host.includes('ondigitalocean.com')
+          postgresSslEnv === 'true' ||
+          postgresSslEnv === '1' ||
+          (db.host && db.host.includes('ondigitalocean.com'))
             ? { rejectUnauthorized: false }
             : false;
         return {
